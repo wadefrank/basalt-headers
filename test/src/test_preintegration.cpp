@@ -753,3 +753,163 @@ TEST(ImuPreintegrationTestCase, ComputeSqrtCovInv) {
       << cov_inv_computed << "\ncov_inv_gt\n"
       << cov_inv_gt;
 }
+
+TEST(ImuPreintegrationTestCase, ZeroMeasurements) {
+  // Test behavior with zero measurements
+  basalt::IntegratedImuMeasurement<double> imu_meas(0, Eigen::Vector3d::Zero(),
+                                                   Eigen::Vector3d::Zero());
+
+  basalt::PoseVelState<double> state0;
+  basalt::PoseVelState<double> state1;
+
+  // Set initial state
+  state0.T_w_i = Sophus::SE3d();
+  state0.vel_w_i = Eigen::Vector3d(1, 0, 0);  // Initial velocity in x direction
+
+  // Predict with zero measurements should only apply gravity
+  imu_meas.predictState(state0, basalt::constants::G, state1);
+
+  // Position should be unchanged since dt = 0
+  EXPECT_TRUE(state1.T_w_i.translation().isApprox(state0.T_w_i.translation()));
+  EXPECT_TRUE(state1.T_w_i.rotationMatrix().isApprox(state0.T_w_i.rotationMatrix()));
+  
+  // Velocity should be unchanged since dt = 0
+  EXPECT_TRUE(state1.vel_w_i.isApprox(state0.vel_w_i));
+}
+
+TEST(ImuPreintegrationTestCase, SingleMeasurement) {
+  basalt::IntegratedImuMeasurement<double> imu_meas(0, Eigen::Vector3d::Zero(),
+                                                   Eigen::Vector3d::Zero());
+
+  // Create a single measurement with known values
+  basalt::ImuData<double> data;
+  data.t_ns = 1e7;  // 10ms
+  data.accel = Eigen::Vector3d(0, 0, 9.81);  // Cancels gravity
+  data.gyro = Eigen::Vector3d(0, 0, 0.1);    // Small rotation around z
+
+  // Integrate the measurement
+  imu_meas.integrate(data, Eigen::Vector3d::Ones(), Eigen::Vector3d::Ones());
+
+  basalt::PoseVelState<double> state0;
+  basalt::PoseVelState<double> state1;
+
+  // Set initial state
+  state0.T_w_i = Sophus::SE3d();
+  state0.vel_w_i = Eigen::Vector3d::Zero();
+
+  // Predict next state
+  imu_meas.predictState(state0, basalt::constants::G, state1);
+
+  // Verify rotation around z-axis
+  double angle = Eigen::AngleAxisd(state1.T_w_i.rotationMatrix()).angle();
+  EXPECT_NEAR(angle, 0.001, 1e-6);  // 10ms * 0.1 rad/s = 0.001 rad
+
+  // Velocity should be close to zero since accel cancels gravity
+  EXPECT_TRUE(state1.vel_w_i.norm() < 1e-6);
+}
+
+TEST(ImuPreintegrationTestCase, BiasConsistency) {
+  // Test that bias updates are consistent
+  Eigen::Vector3d bias_gyro(0.01, -0.01, 0.02);
+  Eigen::Vector3d bias_accel(0.1, -0.1, 0.05);
+
+  basalt::IntegratedImuMeasurement<double> imu_meas(0, bias_gyro, bias_accel);
+
+  // Create measurement data
+  basalt::ImuData<double> data;
+  data.t_ns = 1e7;
+  data.accel = Eigen::Vector3d(1, 0, 9.81);
+  data.gyro = Eigen::Vector3d(0.1, 0.2, 0.3);
+
+  // Integrate with initial biases
+  imu_meas.integrate(data, Eigen::Vector3d::Ones(), Eigen::Vector3d::Ones());
+
+  basalt::PoseVelState<double> state0;
+  basalt::PoseVelState<double> state1;
+  basalt::PoseVelState<double> state1_updated;
+  state0.T_w_i = Sophus::SE3d();
+  state0.vel_w_i = Eigen::Vector3d::Zero();
+
+  // Get state with initial biases
+  imu_meas.predictState(state0, basalt::constants::G, state1);
+
+  // Create new measurement with different biases
+  basalt::IntegratedImuMeasurement<double> imu_meas_updated(
+      0, bias_gyro + Eigen::Vector3d(0.001, -0.002, 0.003),
+      bias_accel + Eigen::Vector3d(0.01, -0.02, 0.03));
+
+  // Integrate same data with updated biases
+  imu_meas_updated.integrate(data, Eigen::Vector3d::Ones(), Eigen::Vector3d::Ones());
+  imu_meas_updated.predictState(state0, basalt::constants::G, state1_updated);
+
+  // Verify that the state difference is consistent with the bias update
+  Sophus::SE3d delta_pose = state1.T_w_i.inverse() * state1_updated.T_w_i;
+  EXPECT_TRUE(delta_pose.translation().norm() > 1e-6);
+  EXPECT_TRUE((state1.vel_w_i - state1_updated.vel_w_i).norm() > 1e-6);
+}
+
+TEST(ImuPreintegrationTestCase, TimeConsistency) {
+  // Test that integration time is tracked correctly
+  int64_t start_t_ns = 1000000000;  // 1s
+  basalt::IntegratedImuMeasurement<double> imu_meas(start_t_ns, 
+                                                   Eigen::Vector3d::Zero(),
+                                                   Eigen::Vector3d::Zero());
+
+  EXPECT_EQ(imu_meas.get_start_t_ns(), start_t_ns);
+  EXPECT_EQ(imu_meas.get_dt_ns(), 0);
+
+  // Add measurements with increasing timestamps
+  for (int i = 0; i < 10; ++i) {
+    basalt::ImuData<double> data;
+    data.t_ns = start_t_ns + (i + 1) * 1e7;  // 10ms intervals
+    data.accel = Eigen::Vector3d::Random();
+    data.gyro = Eigen::Vector3d::Random();
+
+    imu_meas.integrate(data, Eigen::Vector3d::Ones(), Eigen::Vector3d::Ones());
+  }
+
+  // Verify total integration time
+  EXPECT_EQ(imu_meas.get_dt_ns(), 1e8);  // 100ms total
+}
+
+TEST(ImuPreintegrationTestCase, LargeRotation) {
+  // Test behavior with large rotations
+  const int64_t start_t_ns = 1000000000;  // 1s
+  basalt::IntegratedImuMeasurement<double> imu_meas(start_t_ns, 
+                                                   Eigen::Vector3d::Zero(),
+                                                   Eigen::Vector3d::Zero());
+
+  // Create multiple measurements to simulate a quarter rotation
+  const int num_steps = 100;
+  const double dt = 0.01;  // 10ms per step
+  const double omega = M_PI/2;  // Quarter rotation per second
+
+  for (int i = 0; i < num_steps; i++) {
+    basalt::ImuData<double> data;
+    data.t_ns = start_t_ns + (i + 1) * int64_t(dt * 1e9);  // Convert to nanoseconds
+    data.accel = Eigen::Vector3d(0, 0, 9.81);  // Cancel gravity
+    data.gyro = Eigen::Vector3d(0, 0, omega);  // Constant angular velocity
+
+    imu_meas.integrate(data, Eigen::Vector3d::Ones(), Eigen::Vector3d::Ones());
+  }
+
+  basalt::PoseVelState<double> state0;
+  basalt::PoseVelState<double> state1;
+  state0.T_w_i = Sophus::SE3d();
+  state0.vel_w_i = Eigen::Vector3d::Zero();
+
+  imu_meas.predictState(state0, basalt::constants::G, state1);
+
+  // Check that we completed approximately a quarter rotation
+  Eigen::Matrix3d R_diff = state0.T_w_i.rotationMatrix().transpose() * 
+                          state1.T_w_i.rotationMatrix();
+  double angle = std::abs(Eigen::AngleAxisd(R_diff).angle());
+  EXPECT_NEAR(angle, M_PI/2, 1e-6);  // Allow for some numerical error
+
+  // Also verify that a point rotated by this transformation is approximately correct
+  Eigen::Vector3d p0(1, 0, 0);
+  Eigen::Vector3d p1 = state1.T_w_i.rotationMatrix() * p0;
+  EXPECT_NEAR(p1[0], 0, 1e-6);  // Should be close to (0,1,0)
+  EXPECT_NEAR(p1[1], 1, 1e-6);
+  EXPECT_NEAR(p1[2], 0, 1e-6);
+}

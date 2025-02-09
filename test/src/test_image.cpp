@@ -1,4 +1,3 @@
-
 #include <Eigen/Dense>
 
 #include <basalt/image/image.h>
@@ -142,4 +141,101 @@ TEST(Image, ImageInterpolateGradCubicSplines) {
             img.interpCubicSplines<double>(pd + x));
       },
       Eigen::Vector2d::Zero(), 1e-4);
+}
+
+TEST(Image, BasicOperations) {
+  basalt::ManagedImage<uint16_t> img(4, 3);
+
+  // Test Fill
+  img.Fill(42);
+  for (size_t i = 0; i < img.size(); ++i) {
+    EXPECT_EQ(img.ptr[i], 42);
+  }
+
+  // Test Replace
+  img.Replace(42, 100);
+  for (size_t i = 0; i < img.size(); ++i) {
+    EXPECT_EQ(img.ptr[i], 100);
+  }
+
+  // Test Memset
+  img.Memset(0);
+  for (size_t i = 0; i < img.size(); ++i) {
+    EXPECT_EQ(img.ptr[i], 0);
+  }
+}
+
+TEST(Image, SizeAndValidity) {
+  basalt::ManagedImage<uint16_t> img;
+  EXPECT_FALSE(img.IsValid());
+  EXPECT_EQ(img.size(), 0);
+  EXPECT_EQ(img.Area(), 0);
+
+  img = basalt::ManagedImage<uint16_t>(4, 3);
+  EXPECT_TRUE(img.IsValid());
+  EXPECT_EQ(img.size(), 12);
+  EXPECT_EQ(img.Area(), 12);
+  EXPECT_TRUE(img.IsContiguous());
+}
+
+TEST(Image, CopyAndMove) {
+  basalt::ManagedImage<uint16_t> img1(4, 3);
+  setImageData(img1.ptr, img1.size());
+
+  // Test move constructor
+  basalt::ManagedImage<uint16_t> img2(std::move(img1));
+  EXPECT_FALSE(img1.IsValid());
+  EXPECT_TRUE(img2.IsValid());
+  EXPECT_EQ(img2.w, 4);
+  EXPECT_EQ(img2.h, 3);
+
+  // Test move assignment
+  basalt::ManagedImage<uint16_t> img3;
+  img3 = std::move(img2);
+  EXPECT_FALSE(img2.IsValid());
+  EXPECT_TRUE(img3.IsValid());
+  EXPECT_EQ(img3.w, 4);
+  EXPECT_EQ(img3.h, 3);
+}
+
+TEST(Image, SubImageOperations) {
+  basalt::ManagedImage<uint16_t> img(6, 4);
+  setImageData(img.ptr, img.size());
+
+  // Create a sub-image
+  auto sub_img = img.SubImage(1, 1, 3, 2);
+  EXPECT_EQ(sub_img.w, 3);
+  EXPECT_EQ(sub_img.h, 2);
+
+  // Verify sub-image data is correctly referenced
+  for (size_t y = 0; y < sub_img.h; ++y) {
+    for (size_t x = 0; x < sub_img.w; ++x) {
+      EXPECT_EQ(sub_img(x, y), img(x + 1, y + 1));
+    }
+  }
+
+  // Modify sub-image and verify original is affected
+  sub_img.Fill(42);
+  for (size_t y = 0; y < sub_img.h; ++y) {
+    for (size_t x = 0; x < sub_img.w; ++x) {
+      EXPECT_EQ(img(x + 1, y + 1), 42);
+    }
+  }
+}
+
+TEST(Image, Transformations) {
+  basalt::ManagedImage<uint16_t> img(4, 3);
+  setImageData(img.ptr, img.size());
+
+  // Test transform (multiply by 2)
+  img.Transform([](const uint16_t& val) { return val * 2; });
+
+  // Test accumulate (sum all elements)
+  uint32_t sum =
+      img.Accumulate(0, [](uint32_t acc, uint16_t val) { return acc + val; });
+  EXPECT_GT(sum, 0);
+
+  // Test MinMax
+  auto [min_val, max_val] = img.MinMax();
+  EXPECT_LE(min_val, max_val);
 }

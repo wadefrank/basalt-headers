@@ -44,51 +44,57 @@ static const Eigen::Vector3d G(0, 0, -9.81);  // Gravity vector [m/s^2]
 }  // namespace basalt::constants
 
 // IMU noise characteristics (realistic values for a typical MEMS IMU)
-constexpr double ACCEL_STD_DEV = 0.23;    // Accelerometer white noise std dev [m/s^2]
-constexpr double GYRO_STD_DEV = 0.0027;   // Gyroscope white noise std dev [rad/s]
+constexpr double ACCEL_STD_DEV =
+    0.23;  // Accelerometer white noise std dev [m/s^2]
+constexpr double GYRO_STD_DEV =
+    0.0027;  // Gyroscope white noise std dev [rad/s]
 
 // Random number generation for IMU noise simulation
-std::random_device rd{};                      // Hardware random number source
-std::mt19937 gen{rd()};                      // Mersenne Twister PRNG with random seed
+std::random_device rd{};  // Hardware random number source
+std::mt19937 gen{rd()};   // Mersenne Twister PRNG with random seed
 
 // Normal distributions for sensor noise generation
-std::normal_distribution<> gyro_noise_dist{0, GYRO_STD_DEV};    // Gyro noise N(0, σ²)
-std::normal_distribution<> accel_noise_dist{0, ACCEL_STD_DEV};  // Accel noise N(0, σ²)
+std::normal_distribution<> gyro_noise_dist{
+    0, GYRO_STD_DEV};  // Gyro noise N(0, σ²)
+std::normal_distribution<> accel_noise_dist{
+    0, ACCEL_STD_DEV};  // Accel noise N(0, σ²)
 
 /**
  * @brief Tests state prediction against ground truth values
- * 
+ *
  * This test verifies that the IMU preintegration correctly predicts the state
- * by comparing against pre-computed ground truth values generated from a spline. It checks:
+ * by comparing against pre-computed ground truth values generated from a
+ * spline. It checks:
  * 1. Position prediction
  * 2. Velocity prediction
  * 3. Orientation prediction
  */
 TEST(ImuPreintegrationTestCase, PredictTestGT) {
   // Set up spline parameters
-  int num_knots = 15;                     // Number of control points for the spline
-  int64_t dt_ns = 1e7;                   // Time step of 10ms in nanoseconds
-  int64_t max_time_ns = int64_t(20e9);   // Maximum integration time (20 seconds)
+  int num_knots = 15;   // Number of control points for the spline
+  int64_t dt_ns = 1e7;  // Time step of 10ms in nanoseconds
+  int64_t max_time_ns = int64_t(20e9);  // Maximum integration time (20 seconds)
 
   // Initialize IMU measurement integrator with zero biases
   basalt::IntegratedImuMeasurement<double> imu_meas(
-      0,                          // Start time (ns)
-      Eigen::Vector3d::Zero(),    // Gyroscope bias
-      Eigen::Vector3d::Zero()     // Accelerometer bias
+      0,                        // Start time (ns)
+      Eigen::Vector3d::Zero(),  // Gyroscope bias
+      Eigen::Vector3d::Zero()   // Accelerometer bias
   );
 
   // Create ground truth trajectory using a spline
   basalt::Se3Spline<5> gt_spline(int64_t(10e9));  // 10s spline duration
-  gt_spline.genRandomTrajectory(num_knots);        // Generate random smooth trajectory
+  gt_spline.genRandomTrajectory(
+      num_knots);  // Generate random smooth trajectory
 
   // Initialize states for ground truth comparison
-  basalt::PoseVelState<double> state0;      // Initial state
-  basalt::PoseVelState<double> state1;      // Predicted state
-  basalt::PoseVelState<double> state1_gt;   // Ground truth state
+  basalt::PoseVelState<double> state0;     // Initial state
+  basalt::PoseVelState<double> state1;     // Predicted state
+  basalt::PoseVelState<double> state1_gt;  // Ground truth state
 
   // Set initial state from ground truth spline at t=0
-  state0.T_w_i = gt_spline.pose(int64_t(0));           // Initial pose
-  state0.vel_w_i = gt_spline.transVelWorld(int64_t(0)); // Initial velocity
+  state0.T_w_i = gt_spline.pose(int64_t(0));             // Initial pose
+  state0.vel_w_i = gt_spline.transVelWorld(int64_t(0));  // Initial velocity
 
   // Integrate IMU measurements along the trajectory
   for (int64_t t_ns = dt_ns / 2; t_ns < max_time_ns; t_ns += dt_ns) {
@@ -97,18 +103,18 @@ TEST(ImuPreintegrationTestCase, PredictTestGT) {
 
     // Convert ground truth acceleration to body frame and remove gravity
     Eigen::Vector3d accel_body =
-        pose.so3().inverse() *                    // Rotation from world to body
-        (gt_spline.transAccelWorld(t_ns) -        // World frame acceleration
-         basalt::constants::G);                    // Subtract gravity
+        pose.so3().inverse() *              // Rotation from world to body
+        (gt_spline.transAccelWorld(t_ns) -  // World frame acceleration
+         basalt::constants::G);             // Subtract gravity
 
     // Get angular velocity in body frame
     Eigen::Vector3d rot_vel_body = gt_spline.rotVelBody(t_ns);
 
     // Create IMU measurement
     basalt::ImuData<double> data;
-    data.accel = accel_body;                      // Linear acceleration
-    data.gyro = rot_vel_body;                     // Angular velocity
-    data.t_ns = t_ns + dt_ns / 2;                // Timestamp at interval midpoint
+    data.accel = accel_body;       // Linear acceleration
+    data.gyro = rot_vel_body;      // Angular velocity
+    data.t_ns = t_ns + dt_ns / 2;  // Timestamp at interval midpoint
 
     // Integrate measurement with unit noise parameters
     imu_meas.integrate(data, Eigen::Vector3d::Ones(), Eigen::Vector3d::Ones());
@@ -140,7 +146,7 @@ TEST(ImuPreintegrationTestCase, PredictTestGT) {
 
 /**
  * @brief Tests Jacobian computation for state prediction
- * 
+ *
  * This test verifies that the Jacobians of the state prediction function are
  * correct. It generates a spline trajectory and integrates the measurements to
  * generate ground truth states. It then computes the Jacobians using the
@@ -248,19 +254,21 @@ TEST(ImuPreintegrationTestCase, PredictJacobiansTest) {
 
 /**
  * @brief Tests residual and Jacobian computation
- * 
- * Computes the Jacobians for residuals and compares them to the numeric Jacobians.
+ *
+ * Computes the Jacobians for residuals and compares them to the numeric
+ * Jacobians.
  */
 TEST(ImuPreintegrationTestCase, ResidualJacobiansTest) {
   // Number of control points for the spline trajectory
   int num_knots = 15;
 
   // Initialize random gyroscope and accelerometer biases
-  // Scale down to realistic values: gyro bias ~0.01 rad/s, accel bias ~0.1 m/s^2
+  // Scale down to realistic values: gyro bias ~0.01 rad/s, accel bias ~0.1
+  // m/s^2
   Eigen::Vector3d bg;
   Eigen::Vector3d ba;
-  bg = Eigen::Vector3d::Random() / 100;    // Gyroscope bias
-  ba = Eigen::Vector3d::Random() / 10;     // Accelerometer bias
+  bg = Eigen::Vector3d::Random() / 100;  // Gyroscope bias
+  ba = Eigen::Vector3d::Random() / 10;   // Accelerometer bias
 
   // Create IMU measurement integrator with initial biases
   basalt::IntegratedImuMeasurement<double> imu_meas(0, bg, ba);
@@ -271,35 +279,34 @@ TEST(ImuPreintegrationTestCase, ResidualJacobiansTest) {
   gt_spline.genRandomTrajectory(num_knots);
 
   // States for testing: initial, predicted, and ground truth
-  basalt::PoseVelState<double> state0;      // Initial state
-  basalt::PoseVelState<double> state1;      // State to test Jacobians
-  basalt::PoseVelState<double> state1_gt;   // Ground truth final state
+  basalt::PoseVelState<double> state0;     // Initial state
+  basalt::PoseVelState<double> state1;     // State to test Jacobians
+  basalt::PoseVelState<double> state1_gt;  // Ground truth final state
 
   // Set initial state from spline at t=0
-  state0.T_w_i = gt_spline.pose(int64_t(0));           // Initial pose
-  state0.vel_w_i = gt_spline.transVelWorld(int64_t(0)); // Initial velocity
+  state0.T_w_i = gt_spline.pose(int64_t(0));             // Initial pose
+  state0.vel_w_i = gt_spline.transVelWorld(int64_t(0));  // Initial velocity
 
   // Generate and integrate IMU measurements along the trajectory
   int64_t dt_ns = 1e7;  // 10ms measurement interval
-  for (int64_t t_ns = dt_ns / 2;
-       t_ns < int64_t(1e8);  // Integrate for 0.1s
+  for (int64_t t_ns = dt_ns / 2; t_ns < int64_t(1e8);  // Integrate for 0.1s
        t_ns += dt_ns) {
     // Get ground truth pose at current time
     Sophus::SE3d pose = gt_spline.pose(t_ns);
-    
+
     // Convert world frame acceleration to body frame and remove gravity
     Eigen::Vector3d accel_body =
         pose.so3().inverse() *
         (gt_spline.transAccelWorld(t_ns) - basalt::constants::G);
-    
+
     // Get angular velocity in body frame
     Eigen::Vector3d rot_vel_body = gt_spline.rotVelBody(t_ns);
 
     // Create IMU measurement by adding biases
     basalt::ImuData<double> data;
-    data.accel = accel_body + ba;           // Add accelerometer bias
-    data.gyro = rot_vel_body + bg;          // Add gyroscope bias
-    data.t_ns = t_ns + dt_ns / 2;           // Timestamp at middle of interval
+    data.accel = accel_body + ba;   // Add accelerometer bias
+    data.gyro = rot_vel_body + bg;  // Add gyroscope bias
+    data.t_ns = t_ns + dt_ns / 2;   // Timestamp at middle of interval
 
     // Integrate measurement with unit covariance
     imu_meas.integrate(data, Eigen::Vector3d::Ones(), Eigen::Vector3d::Ones());
@@ -319,16 +326,19 @@ TEST(ImuPreintegrationTestCase, ResidualJacobiansTest) {
 
   // Create perturbed final state for Jacobian testing
   // Add small random perturbations to pose and velocity
-  state1.T_w_i = gt_spline.pose(imu_meas.get_dt_ns()) *
-                 Sophus::se3_expd(Sophus::Vector6d::Random() / 10);  // ~0.1 perturbation
+  state1.T_w_i =
+      gt_spline.pose(imu_meas.get_dt_ns()) *
+      Sophus::se3_expd(Sophus::Vector6d::Random() / 10);  // ~0.1 perturbation
   state1.vel_w_i = gt_spline.transVelWorld(imu_meas.get_dt_ns()) +
-                   Sophus::Vector3d::Random() / 10;                  // ~0.1 m/s perturbation
+                   Sophus::Vector3d::Random() / 10;  // ~0.1 m/s perturbation
 
   // Matrices to store computed Jacobians
-  basalt::IntegratedImuMeasurement<double>::MatNN d_res_d_state0;  // wrt initial state
-  basalt::IntegratedImuMeasurement<double>::MatNN d_res_d_state1;  // wrt final state
-  basalt::IntegratedImuMeasurement<double>::MatN3 d_res_d_bg;      // wrt gyro bias
-  basalt::IntegratedImuMeasurement<double>::MatN3 d_res_d_ba;      // wrt accel bias
+  basalt::IntegratedImuMeasurement<double>::MatNN
+      d_res_d_state0;  // wrt initial state
+  basalt::IntegratedImuMeasurement<double>::MatNN
+      d_res_d_state1;  // wrt final state
+  basalt::IntegratedImuMeasurement<double>::MatN3 d_res_d_bg;  // wrt gyro bias
+  basalt::IntegratedImuMeasurement<double>::MatN3 d_res_d_ba;  // wrt accel bias
 
   // Compute residual and all Jacobians
   imu_meas.residual(state0, basalt::constants::G, state1, bg, ba,
@@ -395,49 +405,52 @@ TEST(ImuPreintegrationTestCase, ResidualJacobiansTest) {
 
 /**
  * @brief Tests residual bias computation
- * 
- * Ensures that residuals are correctly computed when biases are present and their Jacobians.
+ *
+ * Ensures that residuals are correctly computed when biases are present and
+ * their Jacobians.
  */
 TEST(ImuPreintegrationTestCase, ResidualBiasTest) {
   // Number of control points for the spline trajectory
   int num_knots = 15;
 
   // Initialize random gyroscope and accelerometer biases
-  // Scale down to realistic values: gyro bias ~0.01 rad/s, accel bias ~0.1 m/s^2
-  Eigen::Vector3d bg;  // Gyroscope bias
-  Eigen::Vector3d ba;  // Accelerometer bias
-  bg = Eigen::Vector3d::Random() / 100;    // ~0.01 rad/s
-  ba = Eigen::Vector3d::Random() / 10;     // ~0.1 m/s^2
+  // Scale down to realistic values: gyro bias ~0.01 rad/s, accel bias ~0.1
+  // m/s^2
+  Eigen::Vector3d bg;                    // Gyroscope bias
+  Eigen::Vector3d ba;                    // Accelerometer bias
+  bg = Eigen::Vector3d::Random() / 100;  // ~0.01 rad/s
+  ba = Eigen::Vector3d::Random() / 10;   // ~0.1 m/s^2
 
   // Create ground truth trajectory using a cubic B-spline over 10 seconds
   basalt::Se3Spline<5> gt_spline(int64_t(10e9));
   gt_spline.genRandomTrajectory(num_knots);
 
   // Vectors to store synthetic IMU measurements
-  Eigen::aligned_vector<Eigen::Vector3d> accel_data_vec;  // Accelerometer readings
-  Eigen::aligned_vector<Eigen::Vector3d> gyro_data_vec;   // Gyroscope readings
-  Eigen::aligned_vector<int64_t> timestamps_vec;          // Measurement timestamps
+  Eigen::aligned_vector<Eigen::Vector3d>
+      accel_data_vec;  // Accelerometer readings
+  Eigen::aligned_vector<Eigen::Vector3d> gyro_data_vec;  // Gyroscope readings
+  Eigen::aligned_vector<int64_t> timestamps_vec;  // Measurement timestamps
 
   // Generate synthetic IMU measurements from the ground truth trajectory
   int64_t dt_ns = 1e7;  // 10ms measurement interval
-  for (int64_t t_ns = dt_ns / 2;
-       t_ns < int64_t(1e9);  // Integrate for 1 second
+  for (int64_t t_ns = dt_ns / 2; t_ns < int64_t(1e9);  // Integrate for 1 second
        t_ns += dt_ns) {
     // Get ground truth pose at current time
     Sophus::SE3d pose = gt_spline.pose(t_ns);
-    
+
     // Convert world frame acceleration to body frame and remove gravity
     Eigen::Vector3d accel_body =
         pose.so3().inverse() *
         (gt_spline.transAccelWorld(t_ns) - basalt::constants::G);
-    
+
     // Get angular velocity in body frame
     Eigen::Vector3d rot_vel_body = gt_spline.rotVelBody(t_ns);
 
     // Store measurements with added biases
-    accel_data_vec.emplace_back(accel_body + ba);  // Add accelerometer bias
-    gyro_data_vec.emplace_back(rot_vel_body + bg); // Add gyroscope bias
-    timestamps_vec.emplace_back(t_ns + dt_ns / 2);  // Store timestamp at interval midpoint
+    accel_data_vec.emplace_back(accel_body + ba);   // Add accelerometer bias
+    gyro_data_vec.emplace_back(rot_vel_body + bg);  // Add gyroscope bias
+    timestamps_vec.emplace_back(
+        t_ns + dt_ns / 2);  // Store timestamp at interval midpoint
   }
 
   // Create IMU measurement integrator with true biases
@@ -462,14 +475,17 @@ TEST(ImuPreintegrationTestCase, ResidualBiasTest) {
   state0.vel_w_i = gt_spline.transVelWorld(int64_t(0));
 
   // Set final state with small random perturbation from ground truth
-  state1.T_w_i = gt_spline.pose(imu_meas.get_dt_ns()) *
-                 Sophus::se3_expd(Sophus::Vector6d::Random() / 10);  // ~0.1 perturbation
+  state1.T_w_i =
+      gt_spline.pose(imu_meas.get_dt_ns()) *
+      Sophus::se3_expd(Sophus::Vector6d::Random() / 10);  // ~0.1 perturbation
   state1.vel_w_i = gt_spline.transVelWorld(imu_meas.get_dt_ns()) +
-                   Sophus::Vector3d::Random() / 10;                  // ~0.1 m/s perturbation
+                   Sophus::Vector3d::Random() / 10;  // ~0.1 m/s perturbation
 
   // Create test biases with small perturbations from true values
-  Eigen::Vector3d bg_test = bg + Eigen::Vector3d::Random() / 1000;  // ~0.001 rad/s difference
-  Eigen::Vector3d ba_test = ba + Eigen::Vector3d::Random() / 100;   // ~0.01 m/s^2 difference
+  Eigen::Vector3d bg_test =
+      bg + Eigen::Vector3d::Random() / 1000;  // ~0.001 rad/s difference
+  Eigen::Vector3d ba_test =
+      ba + Eigen::Vector3d::Random() / 100;  // ~0.01 m/s^2 difference
 
   // Matrices to store Jacobians
   basalt::IntegratedImuMeasurement<double>::MatN3 d_res_d_ba;  // wrt accel bias
@@ -569,15 +585,17 @@ TEST(ImuPreintegrationTestCase, ResidualBiasTest) {
 
 /**
  * @brief Tests computation of residual Jacobians for bias terms
- * 
- * Verifies that the residual Jacobians for gyroscope and accelerometer biases are computed correctly by comparing them to the numeric Jacobians
+ *
+ * Verifies that the residual Jacobians for gyroscope and accelerometer biases
+ * are computed correctly by comparing them to the numeric Jacobians
  */
 TEST(ImuPreintegrationTestCase, BiasResidualJacobiansTest) {
   // Number of control points for the spline trajectory
   int num_knots = 15;
 
   // Initialize random gyroscope and accelerometer biases
-  // Scale down to realistic values: gyro bias ~0.01 rad/s, accel bias ~0.1 m/s^2
+  // Scale down to realistic values: gyro bias ~0.01 rad/s, accel bias ~0.1
+  // m/s^2
   Eigen::Vector3d bg;
   Eigen::Vector3d ba;
   bg = Eigen::Vector3d::Random() / 100;
@@ -588,30 +606,31 @@ TEST(ImuPreintegrationTestCase, BiasResidualJacobiansTest) {
   gt_spline.genRandomTrajectory(num_knots);
 
   // Vectors to store synthetic IMU measurements
-  Eigen::aligned_vector<Eigen::Vector3d> accel_data_vec;  // Accelerometer readings
-  Eigen::aligned_vector<Eigen::Vector3d> gyro_data_vec;   // Gyroscope readings
-  Eigen::aligned_vector<int64_t> timestamps_vec;          // Measurement timestamps
+  Eigen::aligned_vector<Eigen::Vector3d>
+      accel_data_vec;  // Accelerometer readings
+  Eigen::aligned_vector<Eigen::Vector3d> gyro_data_vec;  // Gyroscope readings
+  Eigen::aligned_vector<int64_t> timestamps_vec;  // Measurement timestamps
 
   // Generate synthetic IMU measurements from the ground truth trajectory
   int64_t dt_ns = 1e7;  // 10ms measurement interval
-  for (int64_t t_ns = dt_ns / 2;
-       t_ns < int64_t(1e9);  // Integrate for 1 second
+  for (int64_t t_ns = dt_ns / 2; t_ns < int64_t(1e9);  // Integrate for 1 second
        t_ns += dt_ns) {
     // Get ground truth pose at current time
     Sophus::SE3d pose = gt_spline.pose(t_ns);
-    
+
     // Convert world frame acceleration to body frame and remove gravity
     Eigen::Vector3d accel_body =
         pose.so3().inverse() *
         (gt_spline.transAccelWorld(t_ns) - basalt::constants::G);
-    
+
     // Get angular velocity in body frame
     Eigen::Vector3d rot_vel_body = gt_spline.rotVelBody(t_ns);
 
     // Store measurements with added biases
-    accel_data_vec.emplace_back(accel_body + ba);  // Add accelerometer bias
-    gyro_data_vec.emplace_back(rot_vel_body + bg); // Add gyroscope bias
-    timestamps_vec.emplace_back(t_ns + dt_ns / 2);  // Store timestamp at interval midpoint
+    accel_data_vec.emplace_back(accel_body + ba);   // Add accelerometer bias
+    gyro_data_vec.emplace_back(rot_vel_body + bg);  // Add gyroscope bias
+    timestamps_vec.emplace_back(
+        t_ns + dt_ns / 2);  // Store timestamp at interval midpoint
   }
 
   // Create IMU measurement integrator with initial biases
@@ -693,9 +712,10 @@ TEST(ImuPreintegrationTestCase, BiasResidualJacobiansTest) {
 
 /**
  * @brief Tests covariance propagation
- * 
- * Verifies the measurement covariance computation. Samples accelerometer and gyro noise to compute the variance numerically.
- * Uses KL-divergence to compare the computed covariance with the one computed analytically.
+ *
+ * Verifies the measurement covariance computation. Samples accelerometer and
+ * gyro noise to compute the variance numerically. Uses KL-divergence to compare
+ * the computed covariance with the one computed analytically.
  */
 TEST(ImuPreintegrationTestCase, CovarianceTest) {
   // Number of control points for the spline trajectory
@@ -706,37 +726,40 @@ TEST(ImuPreintegrationTestCase, CovarianceTest) {
   gt_spline.genRandomTrajectory(num_knots);
 
   // Vectors to store noise-free IMU measurements
-  Eigen::aligned_vector<Eigen::Vector3d> accel_data_vec;  // Accelerometer readings
-  Eigen::aligned_vector<Eigen::Vector3d> gyro_data_vec;   // Gyroscope readings
-  Eigen::aligned_vector<int64_t> timestamps_vec;          // Measurement timestamps
+  Eigen::aligned_vector<Eigen::Vector3d>
+      accel_data_vec;  // Accelerometer readings
+  Eigen::aligned_vector<Eigen::Vector3d> gyro_data_vec;  // Gyroscope readings
+  Eigen::aligned_vector<int64_t> timestamps_vec;  // Measurement timestamps
 
   // Generate synthetic IMU measurements from the ground truth trajectory
   int64_t dt_ns = 1e7;  // 10ms measurement interval
-  for (int64_t t_ns = dt_ns / 2;
-       t_ns < int64_t(1e9);  // Integrate for 1 second
+  for (int64_t t_ns = dt_ns / 2; t_ns < int64_t(1e9);  // Integrate for 1 second
        t_ns += dt_ns) {
     // Get ground truth pose at current time
     Sophus::SE3d pose = gt_spline.pose(t_ns);
-    
+
     // Convert world frame acceleration to body frame and remove gravity
     Eigen::Vector3d accel_body =
         pose.so3().inverse() *
         (gt_spline.transAccelWorld(t_ns) - basalt::constants::G);
-    
+
     // Get angular velocity in body frame
     Eigen::Vector3d rot_vel_body = gt_spline.rotVelBody(t_ns);
 
     // Store noise-free measurements
     accel_data_vec.emplace_back(accel_body);
     gyro_data_vec.emplace_back(rot_vel_body);
-    timestamps_vec.emplace_back(t_ns + dt_ns / 2);  // Store timestamp at interval midpoint
+    timestamps_vec.emplace_back(
+        t_ns + dt_ns / 2);  // Store timestamp at interval midpoint
   }
 
   // Set measurement covariances (variance = std_dev^2)
   Eigen::Vector3d accel_cov;
   Eigen::Vector3d gyro_cov;
-  accel_cov.setConstant(ACCEL_STD_DEV * ACCEL_STD_DEV);  // Accelerometer measurement variance
-  gyro_cov.setConstant(GYRO_STD_DEV * GYRO_STD_DEV);     // Gyroscope measurement variance
+  accel_cov.setConstant(ACCEL_STD_DEV *
+                        ACCEL_STD_DEV);  // Accelerometer measurement variance
+  gyro_cov.setConstant(GYRO_STD_DEV *
+                       GYRO_STD_DEV);  // Gyroscope measurement variance
 
   // Create IMU measurement integrator with zero initial biases
   basalt::IntegratedImuMeasurement<double> imu_meas(0, Eigen::Vector3d::Zero(),
@@ -799,13 +822,15 @@ TEST(ImuPreintegrationTestCase, CovarianceTest) {
   // Compute empirical covariance by averaging
   cov_computed /= num_samples;
 
-  // Compute Kullback-Leibler divergence between analytical and empirical covariances
-  // KL = tr(Σ₁⁻¹Σ₂) - n + ln(|Σ₁|/|Σ₂|), where Σ₁ is analytical and Σ₂ is empirical
+  // Compute Kullback-Leibler divergence between analytical and empirical
+  // covariances KL = tr(Σ₁⁻¹Σ₂) - n + ln(|Σ₁|/|Σ₂|), where Σ₁ is analytical and
+  // Σ₂ is empirical
   double kl =
       (imu_meas.get_cov_inv() * cov_computed).trace() - 9 +
       std::log(imu_meas.get_cov().determinant() / cov_computed.determinant());
 
-  // Verify that analytical and empirical covariances are similar (small KL divergence)
+  // Verify that analytical and empirical covariances are similar (small KL
+  // divergence)
   EXPECT_LE(kl, 0.08);
 
   // Verify random number generator properties
@@ -824,8 +849,9 @@ TEST(ImuPreintegrationTestCase, CovarianceTest) {
 
 /**
  * @brief Tests random walk behavior
- * 
- * Verifies that the random walk variance scales linearly with the integration time (standard deviation scales as sqrt(dt)).
+ *
+ * Verifies that the random walk variance scales linearly with the integration
+ * time (standard deviation scales as sqrt(dt)).
  */
 TEST(ImuPreintegrationTestCase, RandomWalkTest) {
   // Time step for discrete integration (5ms)
@@ -863,7 +889,7 @@ TEST(ImuPreintegrationTestCase, RandomWalkTest) {
   // Verify that standard deviation grows as sqrt(t)
   // For a random walk, std_dev(t) = noise_std_dev * sqrt(t)
   EXPECT_NEAR(GYRO_STD_DEV * std::sqrt(period_dt), std, 1e-4);
-  
+
   // Verify that variance grows linearly with time
   // For a random walk, var(t) = noise_variance * t
   EXPECT_NEAR(GYRO_STD_DEV * GYRO_STD_DEV * period_dt, var, 1e-6);
@@ -871,12 +897,13 @@ TEST(ImuPreintegrationTestCase, RandomWalkTest) {
 
 /**
  * @brief Tests covariance inverse computation
- * 
+ *
  * Verifies that the inverse of the covariance matrix is computed correctly.
  */
 TEST(ImuPreintegrationTestCase, ComputeCovInv) {
   // Define MatNN type alias for the covariance matrix type
-  // This is a square matrix of size N where N is the dimension of the state space
+  // This is a square matrix of size N where N is the dimension of the state
+  // space
   using MatNN = basalt::IntegratedImuMeasurement<double>::MatNN;
 
   // Number of control points for the spline trajectory
@@ -897,12 +924,12 @@ TEST(ImuPreintegrationTestCase, ComputeCovInv) {
        t_ns += dt_ns) {
     // Get ground truth pose at current time
     Sophus::SE3d pose = gt_spline.pose(t_ns);
-    
+
     // Convert world frame acceleration to body frame and remove gravity
     Eigen::Vector3d accel_body =
         pose.so3().inverse() *
         (gt_spline.transAccelWorld(t_ns) - basalt::constants::G);
-    
+
     // Get angular velocity in body frame
     Eigen::Vector3d rot_vel_body = gt_spline.rotVelBody(t_ns);
 
@@ -921,7 +948,7 @@ TEST(ImuPreintegrationTestCase, ComputeCovInv) {
 
   // Get inverse covariance computed by the optimized method
   MatNN cov_inv_computed = imu_meas.get_cov_inv();
-  
+
   // Compute ground truth inverse covariance by direct matrix inversion
   MatNN cov_inv_gt = imu_meas.get_cov().inverse();
 
@@ -935,12 +962,14 @@ TEST(ImuPreintegrationTestCase, ComputeCovInv) {
 
 /**
  * @brief Tests square root of covariance inverse computation
- * 
- * Verifies the computation of the square root of the inverse covariance matrix by squaring it and comparing to the original matrix.
+ *
+ * Verifies the computation of the square root of the inverse covariance matrix
+ * by squaring it and comparing to the original matrix.
  */
 TEST(ImuPreintegrationTestCase, ComputeSqrtCovInv) {
   // Define MatNN type alias for the covariance matrix type
-  // This is a square matrix of size N where N is the dimension of the state space
+  // This is a square matrix of size N where N is the dimension of the state
+  // space
   using MatNN = basalt::IntegratedImuMeasurement<double>::MatNN;
 
   // Number of control points for the spline trajectory
@@ -961,12 +990,12 @@ TEST(ImuPreintegrationTestCase, ComputeSqrtCovInv) {
        t_ns += dt_ns) {
     // Get ground truth pose at current time
     Sophus::SE3d pose = gt_spline.pose(t_ns);
-    
+
     // Convert world frame acceleration to body frame and remove gravity
     Eigen::Vector3d accel_body =
         pose.so3().inverse() *
         (gt_spline.transAccelWorld(t_ns) - basalt::constants::G);
-    
+
     // Get angular velocity in body frame
     Eigen::Vector3d rot_vel_body = gt_spline.rotVelBody(t_ns);
 
@@ -985,7 +1014,7 @@ TEST(ImuPreintegrationTestCase, ComputeSqrtCovInv) {
 
   // Get square root of inverse covariance computed by the optimized method
   MatNN sqrt_cov_inv_computed = imu_meas.get_sqrt_cov_inv();
-  
+
   // Compute square root of inverse covariance by squaring the result
   MatNN cov_inv_computed =
       sqrt_cov_inv_computed.transpose() * sqrt_cov_inv_computed;
@@ -1003,9 +1032,9 @@ TEST(ImuPreintegrationTestCase, ComputeSqrtCovInv) {
 
 /**
  * @brief Tests behavior with zero measurements
- * 
- * Verifies that the system behaves correctly when no measurements are integrated.
- * This edge case should:
+ *
+ * Verifies that the system behaves correctly when no measurements are
+ * integrated. This edge case should:
  * 1. Maintain the initial state
  * 2. Not introduce any artificial motion
  * 3. Handle zero time delta appropriately
@@ -1013,7 +1042,7 @@ TEST(ImuPreintegrationTestCase, ComputeSqrtCovInv) {
 TEST(ImuPreintegrationTestCase, ZeroMeasurements) {
   // Test behavior with zero measurements
   basalt::IntegratedImuMeasurement<double> imu_meas(0, Eigen::Vector3d::Zero(),
-                                                   Eigen::Vector3d::Zero());
+                                                    Eigen::Vector3d::Zero());
 
   basalt::PoseVelState<double> state0;
   basalt::PoseVelState<double> state1;
@@ -1027,15 +1056,16 @@ TEST(ImuPreintegrationTestCase, ZeroMeasurements) {
 
   // Position should be unchanged since dt = 0
   EXPECT_TRUE(state1.T_w_i.translation().isApprox(state0.T_w_i.translation()));
-  EXPECT_TRUE(state1.T_w_i.rotationMatrix().isApprox(state0.T_w_i.rotationMatrix()));
-  
+  EXPECT_TRUE(
+      state1.T_w_i.rotationMatrix().isApprox(state0.T_w_i.rotationMatrix()));
+
   // Velocity should be unchanged since dt = 0
   EXPECT_TRUE(state1.vel_w_i.isApprox(state0.vel_w_i));
 }
 
 /**
  * @brief Tests integration of a single measurement
- * 
+ *
  * Verifies that a single IMU measurement is correctly integrated. This test:
  * 1. Creates a measurement with known values
  * 2. Integrates the measurement
@@ -1044,11 +1074,11 @@ TEST(ImuPreintegrationTestCase, ZeroMeasurements) {
  */
 TEST(ImuPreintegrationTestCase, SingleMeasurement) {
   basalt::IntegratedImuMeasurement<double> imu_meas(0, Eigen::Vector3d::Zero(),
-                                                   Eigen::Vector3d::Zero());
+                                                    Eigen::Vector3d::Zero());
 
   // Create a single measurement with known values
   basalt::ImuData<double> data;
-  data.t_ns = 1e7;  // 10ms
+  data.t_ns = 1e7;                           // 10ms
   data.accel = Eigen::Vector3d(0, 0, 9.81);  // Cancels gravity
   data.gyro = Eigen::Vector3d(0, 0, 0.1);    // Small rotation around z
 
@@ -1073,7 +1103,7 @@ TEST(ImuPreintegrationTestCase, SingleMeasurement) {
 
 /**
  * @brief Tests consistency of bias updates
- * 
+ *
  * Verifies that changes in IMU biases produce consistent changes in the
  * predicted states. This test:
  * 1. Integrates measurements with initial biases
@@ -1111,7 +1141,8 @@ TEST(ImuPreintegrationTestCase, BiasConsistency) {
       bias_accel + Eigen::Vector3d(0.01, -0.02, 0.03));
 
   // Integrate same data with updated biases
-  imu_meas_updated.integrate(data, Eigen::Vector3d::Ones(), Eigen::Vector3d::Ones());
+  imu_meas_updated.integrate(data, Eigen::Vector3d::Ones(),
+                             Eigen::Vector3d::Ones());
   imu_meas_updated.predictState(state0, basalt::constants::G, state1_updated);
 
   // Verify that the state difference is consistent with the bias update
@@ -1122,7 +1153,7 @@ TEST(ImuPreintegrationTestCase, BiasConsistency) {
 
 /**
  * @brief Tests time consistency in integration
- * 
+ *
  * Verifies that the integration properly handles timestamps and time intervals.
  * This test:
  * 1. Checks proper initialization of time variables
@@ -1132,9 +1163,8 @@ TEST(ImuPreintegrationTestCase, BiasConsistency) {
 TEST(ImuPreintegrationTestCase, TimeConsistency) {
   // Test that integration time is tracked correctly
   int64_t start_t_ns = 1000000000;  // 1s
-  basalt::IntegratedImuMeasurement<double> imu_meas(start_t_ns, 
-                                                   Eigen::Vector3d::Zero(),
-                                                   Eigen::Vector3d::Zero());
+  basalt::IntegratedImuMeasurement<double> imu_meas(
+      start_t_ns, Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());
 
   EXPECT_EQ(imu_meas.get_start_t_ns(), start_t_ns);
   EXPECT_EQ(imu_meas.get_dt_ns(), 0);
@@ -1155,7 +1185,7 @@ TEST(ImuPreintegrationTestCase, TimeConsistency) {
 
 /**
  * @brief Tests integration of large rotations
- * 
+ *
  * Verifies that the integration remains accurate for large rotations.
  * This test:
  * 1. Simulates a quarter rotation around z-axis
@@ -1165,43 +1195,49 @@ TEST(ImuPreintegrationTestCase, TimeConsistency) {
 TEST(ImuPreintegrationTestCase, LargeRotation) {
   // Initialize start time at 1s in nanoseconds for better numerical stability
   const int64_t start_t_ns = 1000000000;  // 1s
-  
+
   // Create IMU measurement integrator with zero initial biases
-  basalt::IntegratedImuMeasurement<double> imu_meas(start_t_ns, 
-                                                   Eigen::Vector3d::Zero(),  // Initial accelerometer bias
-                                                   Eigen::Vector3d::Zero()); // Initial gyroscope bias
+  basalt::IntegratedImuMeasurement<double> imu_meas(
+      start_t_ns,
+      Eigen::Vector3d::Zero(),   // Initial accelerometer bias
+      Eigen::Vector3d::Zero());  // Initial gyroscope bias
 
   // Simulation parameters for a quarter rotation around z-axis
-  const int num_steps = 100;              // Number of discrete integration steps
-  const double dt = 0.01;                 // Time step in seconds (10ms)
-  const double omega = M_PI/2;            // Angular velocity for 90-degree rotation in 1s
+  const int num_steps = 100;  // Number of discrete integration steps
+  const double dt = 0.01;     // Time step in seconds (10ms)
+  const double omega =
+      M_PI / 2;  // Angular velocity for 90-degree rotation in 1s
 
   // Generate and integrate IMU measurements for the rotation
   for (int i = 0; i < num_steps; i++) {
     basalt::ImuData<double> data;
     // Convert time step to nanoseconds for precise timing
     data.t_ns = start_t_ns + (i + 1) * int64_t(dt * 1e9);
-    data.accel = Eigen::Vector3d(0, 0, 9.81);  // Apply upward acceleration to cancel gravity
-    data.gyro = Eigen::Vector3d(0, 0, omega);  // Apply constant angular velocity around z-axis
+    data.accel = Eigen::Vector3d(
+        0, 0, 9.81);  // Apply upward acceleration to cancel gravity
+    data.gyro = Eigen::Vector3d(
+        0, 0, omega);  // Apply constant angular velocity around z-axis
 
     // Integrate measurement with unit noise characteristics
     imu_meas.integrate(data, Eigen::Vector3d::Ones(), Eigen::Vector3d::Ones());
   }
 
   // Initialize states for prediction
-  basalt::PoseVelState<double> state0;    // Initial state
-  basalt::PoseVelState<double> state1;    // State after integration
-  state0.T_w_i = Sophus::SE3d();          // Identity transformation (no initial rotation/translation)
-  state0.vel_w_i = Eigen::Vector3d::Zero(); // Zero initial velocity
+  basalt::PoseVelState<double> state0;  // Initial state
+  basalt::PoseVelState<double> state1;  // State after integration
+  state0.T_w_i = Sophus::SE3d();        // Identity transformation (no initial
+                                        // rotation/translation)
+  state0.vel_w_i = Eigen::Vector3d::Zero();  // Zero initial velocity
 
   // Predict final state using integrated measurements
   imu_meas.predictState(state0, basalt::constants::G, state1);
 
   // Compute and verify rotation angle between initial and final states
-  Eigen::Matrix3d R_diff = state0.T_w_i.rotationMatrix().transpose() * 
-                          state1.T_w_i.rotationMatrix();
+  Eigen::Matrix3d R_diff =
+      state0.T_w_i.rotationMatrix().transpose() * state1.T_w_i.rotationMatrix();
   double angle = std::abs(Eigen::AngleAxisd(R_diff).angle());
-  EXPECT_NEAR(angle, M_PI/2, 1e-6);  // Verify 90-degree rotation with small tolerance
+  EXPECT_NEAR(angle, M_PI / 2,
+              1e-6);  // Verify 90-degree rotation with small tolerance
 
   // Verify rotation effect on a unit vector along x-axis
   // After 90-degree CCW rotation around z, (1,0,0) should become (0,1,0)

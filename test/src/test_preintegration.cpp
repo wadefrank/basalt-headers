@@ -38,77 +38,115 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "gtest/gtest.h"
 #include "test_utils.h"
 
+// Define gravity vector in world frame (z-down convention)
 namespace basalt::constants {
-static const Eigen::Vector3d G(0, 0, -9.81);
+static const Eigen::Vector3d G(0, 0, -9.81);  // Gravity vector [m/s^2]
 }  // namespace basalt::constants
 
-static const double ACCEL_STD_DEV = 0.23;
-static const double GYRO_STD_DEV = 0.0027;
+// IMU noise characteristics (realistic values for a typical MEMS IMU)
+constexpr double ACCEL_STD_DEV = 0.23;    // Accelerometer white noise std dev [m/s^2]
+constexpr double GYRO_STD_DEV = 0.0027;   // Gyroscope white noise std dev [rad/s]
 
-// Smaller noise for testing
-// static const double accel_std_dev = 0.00023;
-// static const double gyro_std_dev = 0.0000027;
+// Random number generation for IMU noise simulation
+std::random_device rd{};                      // Hardware random number source
+std::mt19937 gen{rd()};                      // Mersenne Twister PRNG with random seed
 
-std::random_device rd{};
-std::mt19937 gen{rd()};
+// Normal distributions for sensor noise generation
+std::normal_distribution<> gyro_noise_dist{0, GYRO_STD_DEV};    // Gyro noise N(0, σ²)
+std::normal_distribution<> accel_noise_dist{0, ACCEL_STD_DEV};  // Accel noise N(0, σ²)
 
-std::normal_distribution<> gyro_noise_dist{0, GYRO_STD_DEV};
-std::normal_distribution<> accel_noise_dist{0, ACCEL_STD_DEV};
-
+/**
+ * @brief Tests state prediction against ground truth values
+ * 
+ * This test verifies that the IMU preintegration correctly predicts the state
+ * by comparing against pre-computed ground truth values generated from a spline. It checks:
+ * 1. Position prediction
+ * 2. Velocity prediction
+ * 3. Orientation prediction
+ */
 TEST(ImuPreintegrationTestCase, PredictTestGT) {
-  int num_knots = 15;
+  // Set up spline parameters
+  int num_knots = 15;                     // Number of control points for the spline
+  int64_t dt_ns = 1e7;                   // Time step of 10ms in nanoseconds
+  int64_t max_time_ns = int64_t(20e9);   // Maximum integration time (20 seconds)
 
-  basalt::IntegratedImuMeasurement<double> imu_meas(0, Eigen::Vector3d::Zero(),
-                                                    Eigen::Vector3d::Zero());
+  // Initialize IMU measurement integrator with zero biases
+  basalt::IntegratedImuMeasurement<double> imu_meas(
+      0,                          // Start time (ns)
+      Eigen::Vector3d::Zero(),    // Gyroscope bias
+      Eigen::Vector3d::Zero()     // Accelerometer bias
+  );
 
-  basalt::Se3Spline<5> gt_spline(int64_t(10e9));
-  gt_spline.genRandomTrajectory(num_knots);
+  // Create ground truth trajectory using a spline
+  basalt::Se3Spline<5> gt_spline(int64_t(10e9));  // 10s spline duration
+  gt_spline.genRandomTrajectory(num_knots);        // Generate random smooth trajectory
 
-  basalt::PoseVelState<double> state0;
-  basalt::PoseVelState<double> state1;
-  basalt::PoseVelState<double> state1_gt;
+  // Initialize states for ground truth comparison
+  basalt::PoseVelState<double> state0;      // Initial state
+  basalt::PoseVelState<double> state1;      // Predicted state
+  basalt::PoseVelState<double> state1_gt;   // Ground truth state
 
-  state0.T_w_i = gt_spline.pose(int64_t(0));
-  state0.vel_w_i = gt_spline.transVelWorld(int64_t(0));
+  // Set initial state from ground truth spline at t=0
+  state0.T_w_i = gt_spline.pose(int64_t(0));           // Initial pose
+  state0.vel_w_i = gt_spline.transVelWorld(int64_t(0)); // Initial velocity
 
-  int64_t dt_ns = 1e7;
-  for (int64_t t_ns = dt_ns / 2;
-       t_ns < int64_t(20e9);  //  gt_spline.maxTimeNs() - int64_t(1e9);
-       t_ns += dt_ns) {
+  // Integrate IMU measurements along the trajectory
+  for (int64_t t_ns = dt_ns / 2; t_ns < max_time_ns; t_ns += dt_ns) {
+    // Get ground truth pose at current time
     Sophus::SE3d pose = gt_spline.pose(t_ns);
+
+    // Convert ground truth acceleration to body frame and remove gravity
     Eigen::Vector3d accel_body =
-        pose.so3().inverse() *
-        (gt_spline.transAccelWorld(t_ns) - basalt::constants::G);
+        pose.so3().inverse() *                    // Rotation from world to body
+        (gt_spline.transAccelWorld(t_ns) -        // World frame acceleration
+         basalt::constants::G);                    // Subtract gravity
+
+    // Get angular velocity in body frame
     Eigen::Vector3d rot_vel_body = gt_spline.rotVelBody(t_ns);
 
+    // Create IMU measurement
     basalt::ImuData<double> data;
-    data.accel = accel_body;
-    data.gyro = rot_vel_body;
-    data.t_ns = t_ns + dt_ns / 2;  // measurement in the middle of the interval;
+    data.accel = accel_body;                      // Linear acceleration
+    data.gyro = rot_vel_body;                     // Angular velocity
+    data.t_ns = t_ns + dt_ns / 2;                // Timestamp at interval midpoint
 
+    // Integrate measurement with unit noise parameters
     imu_meas.integrate(data, Eigen::Vector3d::Ones(), Eigen::Vector3d::Ones());
   }
 
+  // Get ground truth state at final time
   state1_gt.T_w_i = gt_spline.pose(imu_meas.get_dt_ns());
   state1_gt.vel_w_i = gt_spline.transVelWorld(imu_meas.get_dt_ns());
 
+  // Predict final state using integrated measurements
   imu_meas.predictState(state0, basalt::constants::G, state1);
 
+  // Verify velocity prediction (tolerance: 1e-4)
   EXPECT_TRUE(state1_gt.vel_w_i.isApprox(state1.vel_w_i, 1e-4))
       << "vel1_gt " << state1_gt.vel_w_i.transpose() << " vel1 "
       << state1.vel_w_i.transpose();
 
+  // Verify orientation prediction (tolerance: 1e-6 radians)
   EXPECT_LE(state1_gt.T_w_i.unit_quaternion().angularDistance(
                 state1.T_w_i.unit_quaternion()),
             1e-6);
 
+  // Verify position prediction (tolerance: 1e-4 meters)
   EXPECT_TRUE(
       state1_gt.T_w_i.translation().isApprox(state1.T_w_i.translation(), 1e-4))
       << "pose1_gt p " << state1_gt.T_w_i.translation().transpose()
       << " pose1 p " << state1.T_w_i.translation().transpose();
 }
 
-TEST(ImuPreintegrationTestCase, PredictTest) {
+/**
+ * @brief Tests Jacobian computation for state prediction
+ * 
+ * This test verifies that the Jacobians of the state prediction function are
+ * correct. It generates a spline trajectory and integrates the measurements to
+ * generate ground truth states. It then computes the Jacobians using the
+ * preintegration and compares them to the numeric Jacobians.
+ */
+TEST(ImuPreintegrationTestCase, PredictJacobiansTest) {
   int num_knots = 15;
 
   basalt::Se3Spline<5> gt_spline(int64_t(2e9));
@@ -199,7 +237,12 @@ TEST(ImuPreintegrationTestCase, PredictTest) {
   }
 }
 
-TEST(ImuPreintegrationTestCase, ResidualTest) {
+/**
+ * @brief Tests residual and Jacobian computation
+ * 
+ * Computes the Jacobians for residuals and compares them to the numeric Jacobians.
+ */
+TEST(ImuPreintegrationTestCase, ResidualJacobiansTest) {
   int num_knots = 15;
 
   Eigen::Vector3d bg;
@@ -314,7 +357,12 @@ TEST(ImuPreintegrationTestCase, ResidualTest) {
   }
 }
 
-TEST(ImuPreintegrationTestCase, BiasTest) {
+/**
+ * @brief Tests computation of residual Jacobians for bias terms
+ * 
+ * Verifies that the residual Jacobians for gyroscope and accelerometer biases are computed correctly by comparing them to the numeric Jacobians
+ */
+TEST(ImuPreintegrationTestCase, BiasResidualJacobiansTest) {
   int num_knots = 15;
 
   Eigen::Vector3d bg;
@@ -409,6 +457,15 @@ TEST(ImuPreintegrationTestCase, BiasTest) {
   }
 }
 
+/**
+ * @brief Tests residual computation with biases
+ * 
+ * Ensures that residuals are correctly computed when biases are present.
+ * The test verifies:
+ * 1. Residual computation with non-zero biases
+ * 2. Bias effect on residual magnitudes
+ * 3. Proper bias compensation in residuals
+ */
 TEST(ImuPreintegrationTestCase, ResidualBiasTest) {
   int num_knots = 15;
 
@@ -545,6 +602,12 @@ TEST(ImuPreintegrationTestCase, ResidualBiasTest) {
   }
 }
 
+/**
+ * @brief Tests covariance propagation
+ * 
+ * Verifies the measurement covariance computation. Samples accelerometer and gyro noise to compute the variance numerically.
+ * Uses KL-divergence to compare the computed covariance with the one computed analytically.
+ */
 TEST(ImuPreintegrationTestCase, CovarianceTest) {
   int num_knots = 15;
 
@@ -648,6 +711,11 @@ TEST(ImuPreintegrationTestCase, CovarianceTest) {
   EXPECT_LE(std::abs(std::sqrt(var) - ACCEL_STD_DEV), 0.03);
 }
 
+/**
+ * @brief Tests random walk behavior
+ * 
+ * Verifies that the random walk variance scales linearly with the integration time (standard deviation scales as sqrt(dt)).
+ */
 TEST(ImuPreintegrationTestCase, RandomWalkTest) {
   double dt = 0.005;
 
@@ -673,6 +741,11 @@ TEST(ImuPreintegrationTestCase, RandomWalkTest) {
   EXPECT_NEAR(GYRO_STD_DEV * GYRO_STD_DEV * period_dt, var, 1e-6);
 }
 
+/**
+ * @brief Tests covariance inverse computation
+ * 
+ * Verifies that the inverse of the covariance matrix is computed correctly.
+ */
 TEST(ImuPreintegrationTestCase, ComputeCovInv) {
   using MatNN = basalt::IntegratedImuMeasurement<double>::MatNN;
 
@@ -712,6 +785,11 @@ TEST(ImuPreintegrationTestCase, ComputeCovInv) {
       << cov_inv_gt;
 }
 
+/**
+ * @brief Tests square root of covariance inverse computation
+ * 
+ * Verifies the computation of the square root of the inverse covariance matrix by squaring it and comparing to the original matrix.
+ */
 TEST(ImuPreintegrationTestCase, ComputeSqrtCovInv) {
   using MatNN = basalt::IntegratedImuMeasurement<double>::MatNN;
 
@@ -754,6 +832,15 @@ TEST(ImuPreintegrationTestCase, ComputeSqrtCovInv) {
       << cov_inv_gt;
 }
 
+/**
+ * @brief Tests behavior with zero measurements
+ * 
+ * Verifies that the system behaves correctly when no measurements are integrated.
+ * This edge case should:
+ * 1. Maintain the initial state
+ * 2. Not introduce any artificial motion
+ * 3. Handle zero time delta appropriately
+ */
 TEST(ImuPreintegrationTestCase, ZeroMeasurements) {
   // Test behavior with zero measurements
   basalt::IntegratedImuMeasurement<double> imu_meas(0, Eigen::Vector3d::Zero(),
@@ -777,6 +864,15 @@ TEST(ImuPreintegrationTestCase, ZeroMeasurements) {
   EXPECT_TRUE(state1.vel_w_i.isApprox(state0.vel_w_i));
 }
 
+/**
+ * @brief Tests integration of a single measurement
+ * 
+ * Verifies that a single IMU measurement is correctly integrated. This test:
+ * 1. Creates a measurement with known values
+ * 2. Integrates the measurement
+ * 3. Verifies the resulting state change
+ * 4. Checks both rotation and acceleration effects
+ */
 TEST(ImuPreintegrationTestCase, SingleMeasurement) {
   basalt::IntegratedImuMeasurement<double> imu_meas(0, Eigen::Vector3d::Zero(),
                                                    Eigen::Vector3d::Zero());
@@ -792,8 +888,6 @@ TEST(ImuPreintegrationTestCase, SingleMeasurement) {
 
   basalt::PoseVelState<double> state0;
   basalt::PoseVelState<double> state1;
-
-  // Set initial state
   state0.T_w_i = Sophus::SE3d();
   state0.vel_w_i = Eigen::Vector3d::Zero();
 
@@ -808,6 +902,15 @@ TEST(ImuPreintegrationTestCase, SingleMeasurement) {
   EXPECT_TRUE(state1.vel_w_i.norm() < 1e-6);
 }
 
+/**
+ * @brief Tests consistency of bias updates
+ * 
+ * Verifies that changes in IMU biases produce consistent changes in the
+ * predicted states. This test:
+ * 1. Integrates measurements with initial biases
+ * 2. Integrates same measurements with updated biases
+ * 3. Verifies that state differences are consistent with bias changes
+ */
 TEST(ImuPreintegrationTestCase, BiasConsistency) {
   // Test that bias updates are consistent
   Eigen::Vector3d bias_gyro(0.01, -0.01, 0.02);
@@ -848,6 +951,15 @@ TEST(ImuPreintegrationTestCase, BiasConsistency) {
   EXPECT_TRUE((state1.vel_w_i - state1_updated.vel_w_i).norm() > 1e-6);
 }
 
+/**
+ * @brief Tests time consistency in integration
+ * 
+ * Verifies that the integration properly handles timestamps and time intervals.
+ * This test:
+ * 1. Checks proper initialization of time variables
+ * 2. Verifies time accumulation during integration
+ * 3. Ensures proper handling of time intervals
+ */
 TEST(ImuPreintegrationTestCase, TimeConsistency) {
   // Test that integration time is tracked correctly
   int64_t start_t_ns = 1000000000;  // 1s
@@ -872,6 +984,15 @@ TEST(ImuPreintegrationTestCase, TimeConsistency) {
   EXPECT_EQ(imu_meas.get_dt_ns(), 1e8);  // 100ms total
 }
 
+/**
+ * @brief Tests integration of large rotations
+ * 
+ * Verifies that the integration remains accurate for large rotations.
+ * This test:
+ * 1. Simulates a quarter rotation around z-axis
+ * 2. Verifies both the rotation angle
+ * 3. Checks the effect on transformed points
+ */
 TEST(ImuPreintegrationTestCase, LargeRotation) {
   // Test behavior with large rotations
   const int64_t start_t_ns = 1000000000;  // 1s

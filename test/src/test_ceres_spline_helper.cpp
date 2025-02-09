@@ -1,4 +1,46 @@
+/**
+BSD 3-Clause License
 
+Copyright (c) 2019, Vladyslav Usenko and Nikolaus Demmel.
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice, this
+  list of conditions and the following disclaimer.
+
+* Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+
+* Neither the name of the copyright holder nor the names of its
+  contributors may be used to endorse or promote products derived from
+  this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+
+/**
+ * @file test_ceres_spline_helper.cpp
+ * @brief Test suite for the Ceres spline helper functionality
+ *
+ * This file contains tests that verify the correct functionality of spline
+ * evaluations using the CeresSplineHelper class. Tests cover:
+ * - SO3 (3D rotation) spline evaluation and derivatives
+ * - Rd (d-dimensional Euclidean space) spline evaluation
+ * - SE3 (3D rigid body motion) spline evaluation and derivatives
+ * - Sim3 (3D similarity transformation) spline evaluation and derivatives
+ */
 
 #include <iostream>
 
@@ -11,6 +53,20 @@
 #include <basalt/spline/rd_spline.h>
 #include <basalt/spline/so3_spline.h>
 
+/**
+ * @brief Test SO3 spline evaluation using CeresSplineHelper
+ *
+ * @tparam N Number of knots used in the spline (4, 5, or 6)
+ *
+ * Tests the evaluation of SO3 splines by:
+ * 1. Creating a random SO3 spline trajectory
+ * 2. Comparing direct spline evaluation results with CeresSplineHelper results
+ * for:
+ *    - Position (SO3 rotation)
+ *    - Velocity (body frame)
+ *    - Acceleration (body frame)
+ *    - Jerk (body frame)
+ */
 template <int N>
 void test_ceres_spline_helper_so3() {
   static const int64_t dt_ns = 2e9;
@@ -65,9 +121,24 @@ void test_ceres_spline_helper_so3() {
   }
 }
 
+/**
+ * @brief Test Rd (Euclidean space) spline evaluation using CeresSplineHelper
+ *
+ * @tparam N Number of knots used in the spline (4, 5, or 6)
+ *
+ * Tests the evaluation of Rd splines by:
+ * 1. Creating a random trajectory in 3D Euclidean space
+ * 2. Comparing direct spline evaluation results with CeresSplineHelper results
+ * for:
+ *    - Position (3D vector)
+ *    - Velocity (first derivative)
+ *    - Acceleration (second derivative)
+ */
 template <int N>
 void test_ceres_spline_helper_rd() {
+  // Dimension of the spline (3D space)
   static const int DIM = 3;
+  // Time interval between knots in nanoseconds
   static const int64_t dt_ns = 2e9;
 
   basalt::RdSpline<DIM, N> spline(dt_ns);
@@ -115,8 +186,19 @@ void test_ceres_spline_helper_rd() {
   }
 }
 
+/**
+ * @brief Test SE3 velocity evaluation using CeresSplineHelper
+ *
+ * @tparam N Number of knots used in the spline (4, 5, or 6)
+ *
+ * Tests the velocity evaluation of SE3 splines by:
+ * 1. Creating random SE3 knots
+ * 2. Computing velocities using CeresSplineHelper
+ * 3. Verifying the results using numerical differentiation
+ */
 template <int N>
 void test_ceres_spline_helper_vel_se3() {
+  // Time interval between knots in nanoseconds
   static const int64_t dt_ns = 2e9;
 
   Eigen::aligned_vector<Sophus::SE3d> knots;
@@ -163,8 +245,19 @@ void test_ceres_spline_helper_vel_se3() {
     }
 }
 
+/**
+ * @brief Test SE3 acceleration evaluation using CeresSplineHelper
+ *
+ * @tparam N Number of knots used in the spline (4, 5, or 6)
+ *
+ * Tests the acceleration evaluation of SE3 splines by:
+ * 1. Creating random SE3 knots
+ * 2. Computing accelerations using CeresSplineHelper
+ * 3. Verifying the results using numerical differentiation of velocities
+ */
 template <int N>
 void test_ceres_spline_helper_accel_se3() {
+  // Time interval between knots in nanoseconds
   static const int64_t dt_ns = 2e9;
 
   Eigen::aligned_vector<Sophus::SE3d> knots;
@@ -210,8 +303,19 @@ void test_ceres_spline_helper_accel_se3() {
     }
 }
 
+/**
+ * @brief Test SE3 jerk evaluation using CeresSplineHelper
+ *
+ * @tparam N Number of knots used in the spline (4, 5, or 6)
+ *
+ * Tests the jerk evaluation of SE3 splines by:
+ * 1. Creating random SE3 knots
+ * 2. Computing jerks using CeresSplineHelper
+ * 3. Verifying the results using numerical differentiation of accelerations
+ */
 template <int N>
 void test_ceres_spline_helper_jerk_se3() {
+  // Time interval between knots in nanoseconds
   static const int64_t dt_ns = 2e9;
 
   Eigen::aligned_vector<Sophus::SE3d> knots;
@@ -257,6 +361,18 @@ void test_ceres_spline_helper_jerk_se3() {
     }
 }
 
+/**
+ * @brief Test Sim3 velocity evaluation using CeresSplineHelper
+ *
+ * @tparam N Number of knots used in the spline (4, 5, or 6)
+ *
+ * Tests the velocity evaluation of Sim3 splines by:
+ * 1. Creating random Sim3 knots (similarity transformations)
+ * 2. Computing velocities using CeresSplineHelper
+ * 3. Verifying the results using numerical differentiation
+ *
+ * Note: Sim3 includes scale in addition to rotation and translation
+ */
 template <int N>
 void test_ceres_spline_helper_vel_sim3() {
   static const int64_t dt_ns = 2e9;
@@ -305,6 +421,16 @@ void test_ceres_spline_helper_vel_sim3() {
     }
 }
 
+/**
+ * @brief Test Sim3 acceleration evaluation using CeresSplineHelper
+ *
+ * @tparam N Number of knots used in the spline (4, 5, or 6)
+ *
+ * Tests the acceleration evaluation of Sim3 splines by:
+ * 1. Creating random Sim3 knots (similarity transformations)
+ * 2. Computing accelerations using CeresSplineHelper
+ * 3. Verifying the results using numerical differentiation of velocities
+ */
 template <int N>
 void test_ceres_spline_helper_accel_sim3() {
   static const int64_t dt_ns = 2e9;
@@ -352,6 +478,16 @@ void test_ceres_spline_helper_accel_sim3() {
     }
 }
 
+/**
+ * @brief Test Sim3 jerk evaluation using CeresSplineHelper
+ *
+ * @tparam N Number of knots used in the spline (4, 5, or 6)
+ *
+ * Tests the jerk evaluation of Sim3 splines by:
+ * 1. Creating random Sim3 knots (similarity transformations)
+ * 2. Computing jerks using CeresSplineHelper
+ * 3. Verifying the results using numerical differentiation of accelerations
+ */
 template <int N>
 void test_ceres_spline_helper_jerk_sim3() {
   static const int64_t dt_ns = 2e9;
@@ -412,15 +548,15 @@ TEST(CeresSplineTestSuite, CeresSplineHelperSO3_6) {
 }
 
 TEST(CeresSplineTestSuite, CeresSplineHelperRd_4) {
-  test_ceres_spline_helper_so3<4>();
+  test_ceres_spline_helper_rd<4>();
 }
 
 TEST(CeresSplineTestSuite, CeresSplineHelperRd_5) {
-  test_ceres_spline_helper_so3<5>();
+  test_ceres_spline_helper_rd<5>();
 }
 
 TEST(CeresSplineTestSuite, CeresSplineHelperRd_6) {
-  test_ceres_spline_helper_so3<6>();
+  test_ceres_spline_helper_rd<6>();
 }
 
 TEST(CeresSplineTestSuite, CeresSplineHelperSE3vel4) {

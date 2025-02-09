@@ -606,214 +606,373 @@ TEST(SplineTest, CrossProductTest) {
       Eigen::Vector3d::Zero());
 }
 
+/**
+ * @brief Tests R^d B-spline evaluation with 4 control points
+ *
+ * Tests the evaluation of a cubic B-spline in R^d (3D space) with 4 control
+ * points. Verifies that:
+ * 1. Position evaluations are correct at various time points
+ * 2. Jacobians with respect to control points are accurate
+ * 3. Spline interpolation maintains C^2 continuity
+ */
 TEST(SplineTest, UBSplineEvaluateKnots4) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 4;
+  static constexpr int DIM = 3;  // 3D space
+  static constexpr int N = 4;    // 4 control points (cubic spline)
 
+  // Create spline over 2 second interval
   basalt::RdSpline<DIM, N> spline(int64_t(2e9));
   spline.genRandomTrajectory(3 * N);
 
+  // Test at 100ms intervals
   for (int64_t t_ns = 0; t_ns < spline.maxTimeNs(); t_ns += 1e8) {
-    testEvaluate<DIM, N, 0>(spline, t_ns);
+    testEvaluate<DIM, N, 0>(spline, t_ns);  // 0 indicates position evaluation
   }
 }
 
+/**
+ * @brief Tests R^d B-spline evaluation with 5 control points
+ *
+ * Tests the evaluation of a quartic B-spline in R^d with 5 control points.
+ * Similar to N=4 case but with higher order continuity (C^3).
+ */
 TEST(SplineTest, UBSplineEvaluateKnots5) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 5;
+  static constexpr int DIM = 3;  // 3D space
+  static constexpr int N = 5;    // 5 control points (quartic spline)
 
+  // Create spline over 2 second interval
   basalt::RdSpline<DIM, N> spline(int64_t(2e9));
   spline.genRandomTrajectory(3 * N);
 
+  // Test at 100ms intervals
   for (int64_t t_ns = 0; t_ns < spline.maxTimeNs(); t_ns += 1e8) {
-    testEvaluate<DIM, N, 0>(spline, t_ns);
+    testEvaluate<DIM, N, 0>(spline, t_ns);  // 0 indicates position evaluation
   }
 }
 
+/**
+ * @brief Tests R^d B-spline evaluation with 6 control points
+ *
+ * Tests the evaluation of a quintic B-spline in R^d with 6 control points.
+ * Highest order tested, providing C^4 continuity.
+ */
 TEST(SplineTest, UBSplineEvaluateKnots6) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 6;
+  static constexpr int DIM = 3;  // 3D space
+  static constexpr int N = 6;    // 6 control points (quintic spline)
 
+  // Create spline over 2 second interval
   basalt::RdSpline<DIM, N> spline(int64_t(2e9));
   spline.genRandomTrajectory(3 * N);
 
+  // Test at 100ms intervals
   for (int64_t t_ns = 0; t_ns < spline.maxTimeNs(); t_ns += 1e8) {
-    testEvaluate<DIM, N, 0>(spline, t_ns);
+    testEvaluate<DIM, N, 0>(spline, t_ns);  // 0 indicates position evaluation
   }
 }
 
+/**
+ * @brief Tests R^d B-spline velocity with 4 control points
+ *
+ * Tests the velocity computation of a cubic B-spline in R^d.
+ * Verifies that:
+ * 1. Velocity evaluations are correct
+ * 2. Velocity Jacobians are accurate
+ * 3. First derivatives maintain C^1 continuity
+ */
 TEST(SplineTest, UBSplineVelocityKnots4) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 4;
+  static constexpr int DIM = 3;  // 3D space
+  static constexpr int N = 4;    // 4 control points (cubic spline)
 
+  // Create spline over 2 second interval
   basalt::RdSpline<DIM, N> spline(int64_t(2e9));
   spline.genRandomTrajectory(3 * N);
 
+  // Test at 100ms intervals
   for (int64_t t_ns = 0; t_ns < spline.maxTimeNs(); t_ns += 1e8) {
-    testEvaluate<DIM, N, 1>(spline, t_ns);
+    testEvaluate<DIM, N, 1>(spline, t_ns);  // 1 indicates velocity evaluation
   }
 }
 
+/**
+ * @brief Tests R^d B-spline velocity with 5 control points
+ *
+ * Tests the velocity computation of a quartic B-spline in R^d.
+ * Higher order allows for smoother velocity profiles.
+ */
 TEST(SplineTest, UBSplineVelocityKnots5) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 5;
+  static constexpr int DIM = 3;  // 3D space
+  static constexpr int N = 5;    // 5 control points (quartic spline)
 
+  // Create spline over 2 second interval
   basalt::RdSpline<DIM, N> spline(int64_t(2e9));
   spline.genRandomTrajectory(3 * N);
 
+  // Test at 100ms intervals
   for (int64_t t_ns = 0; t_ns < spline.maxTimeNs(); t_ns += 1e8) {
-    testEvaluate<DIM, N, 1>(spline, t_ns);
+    testEvaluate<DIM, N, 1>(spline, t_ns);  // 1 indicates velocity evaluation
   }
 }
 
+/**
+ * @brief Tests R^d B-spline velocity with 6 control points
+ *
+ * Tests the velocity computation of a quintic B-spline in R^d.
+ * Highest order tested, allowing for very smooth velocity transitions.
+ */
 TEST(SplineTest, UBSplineVelocityKnots6) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 6;
+  static constexpr int DIM = 3;  // 3D space
+  static constexpr int N = 6;    // 6 control points (quintic spline)
 
+  // Create spline over 2 second interval
   basalt::RdSpline<DIM, N> spline(int64_t(2e9));
   spline.genRandomTrajectory(3 * N);
 
+  // Test at 100ms intervals
   for (int64_t t_ns = 0; t_ns < spline.maxTimeNs(); t_ns += 1e8) {
-    testEvaluate<DIM, N, 1>(spline, t_ns);
+    testEvaluate<DIM, N, 1>(spline, t_ns);  // 1 indicates velocity evaluation
   }
 }
 
+/**
+ * @brief Tests R^d B-spline acceleration with 4 control points
+ *
+ * Tests the acceleration computation of a cubic B-spline in R^d.
+ * Verifies that:
+ * 1. Acceleration evaluations are correct
+ * 2. Acceleration Jacobians are accurate
+ * 3. Second derivatives maintain C^0 continuity
+ */
 TEST(SplineTest, UBSplineAccelKnots4) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 4;
+  static constexpr int DIM = 3;  // 3D space
+  static constexpr int N = 4;    // 4 control points (cubic spline)
 
+  // Create spline over 2 second interval
   basalt::RdSpline<DIM, N> spline(int64_t(2e9));
   spline.genRandomTrajectory(3 * N);
 
+  // Test at 100ms intervals
   for (int64_t t_ns = 0; t_ns < spline.maxTimeNs(); t_ns += 1e8) {
-    testEvaluate<DIM, N, 2>(spline, t_ns);
+    testEvaluate<DIM, N, 2>(spline,
+                            t_ns);  // 2 indicates acceleration evaluation
   }
 }
 
+/**
+ * @brief Tests R^d B-spline acceleration with 5 control points
+ *
+ * Tests the acceleration computation of a quartic B-spline in R^d.
+ * Higher order allows for continuous acceleration profiles.
+ */
 TEST(SplineTest, UBSplineAccelKnots5) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 5;
+  static constexpr int DIM = 3;  // 3D space
+  static constexpr int N = 5;    // 5 control points (quartic spline)
 
+  // Create spline over 2 second interval
   basalt::RdSpline<DIM, N> spline(int64_t(2e9));
   spline.genRandomTrajectory(3 * N);
 
+  // Test at 100ms intervals
   for (int64_t t_ns = 0; t_ns < spline.maxTimeNs(); t_ns += 1e8) {
-    testEvaluate<DIM, N, 2>(spline, t_ns);
+    testEvaluate<DIM, N, 2>(spline,
+                            t_ns);  // 2 indicates acceleration evaluation
   }
 }
 
+/**
+ * @brief Tests R^d B-spline acceleration with 6 control points
+ *
+ * Tests the acceleration computation of a quintic B-spline in R^d.
+ * Highest order tested, allowing for smooth acceleration transitions.
+ */
 TEST(SplineTest, UBSplineAccelKnots6) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 6;
+  static constexpr int DIM = 3;  // 3D space
+  static constexpr int N = 6;    // 6 control points (quintic spline)
 
+  // Create spline over 2 second interval
   basalt::RdSpline<DIM, N> spline(int64_t(2e9));
   spline.genRandomTrajectory(3 * N);
 
+  // Test at 100ms intervals
   for (int64_t t_ns = 0; t_ns < spline.maxTimeNs(); t_ns += 1e8) {
-    testEvaluate<DIM, N, 2>(spline, t_ns);
+    testEvaluate<DIM, N, 2>(spline,
+                            t_ns);  // 2 indicates acceleration evaluation
   }
 }
 
+/**
+ * @brief Tests R^d B-spline time derivatives with 4 control points
+ *
+ * Tests the time derivatives of position for a cubic B-spline in R^d.
+ * Verifies that numerical time derivatives match analytical ones.
+ */
 TEST(SplineTest, UBSplineEvaluateTimeDeriv4) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 4;
+  static constexpr int DIM = 3;  // 3D space
+  static constexpr int N = 4;    // 4 control points (cubic spline)
 
+  // Create spline over 2 second interval
   basalt::RdSpline<DIM, N> spline(int64_t(2e9));
   spline.genRandomTrajectory(3 * N);
 
+  // Test at 100ms intervals, avoiding boundary points
   for (int64_t t_ns = 1e8; t_ns < spline.maxTimeNs() - 1e8; t_ns += 1e8) {
-    testTimeDeriv<DIM, N, 0>(spline, t_ns);
+    testTimeDeriv<DIM, N, 0>(spline, t_ns);  // 0 indicates position derivatives
   }
 }
 
+/**
+ * @brief Tests R^d B-spline time derivatives with 5 control points
+ *
+ * Tests the time derivatives of position for a quartic B-spline in R^d.
+ * Higher order allows for more accurate derivative computation.
+ */
 TEST(SplineTest, UBSplineEvaluateTimeDeriv5) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 5;
+  static constexpr int DIM = 3;  // 3D space
+  static constexpr int N = 5;    // 5 control points (quartic spline)
 
+  // Create spline over 2 second interval
   basalt::RdSpline<DIM, N> spline(int64_t(2e9));
   spline.genRandomTrajectory(3 * N);
 
+  // Test at 100ms intervals, avoiding boundary points
   for (int64_t t_ns = 1e8; t_ns < spline.maxTimeNs() - 1e8; t_ns += 1e8) {
-    testTimeDeriv<DIM, N, 0>(spline, t_ns);
+    testTimeDeriv<DIM, N, 0>(spline, t_ns);  // 0 indicates position derivatives
   }
 }
 
+/**
+ * @brief Tests R^d B-spline time derivatives with 6 control points
+ *
+ * Tests the time derivatives of position for a quintic B-spline in R^d.
+ * Highest order tested, providing most accurate derivative computation.
+ */
 TEST(SplineTest, UBSplineEvaluateTimeDeriv6) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 6;
+  static constexpr int DIM = 3;  // 3D space
+  static constexpr int N = 6;    // 6 control points (quintic spline)
 
+  // Create spline over 2 second interval
   basalt::RdSpline<DIM, N> spline(int64_t(2e9));
   spline.genRandomTrajectory(3 * N);
 
+  // Test at 100ms intervals, avoiding boundary points
   for (int64_t t_ns = 1e8; t_ns < spline.maxTimeNs() - 1e8; t_ns += 1e8) {
-    testTimeDeriv<DIM, N, 0>(spline, t_ns);
+    testTimeDeriv<DIM, N, 0>(spline, t_ns);  // 0 indicates position derivatives
   }
 }
 
+/**
+ * @brief Tests R^d B-spline velocity time derivatives with 4 control points
+ *
+ * Tests the time derivatives of velocity for a cubic B-spline in R^d.
+ * Verifies that numerical derivatives of velocity match analytical ones.
+ */
 TEST(SplineTest, UBSplineVelocityTimeDeriv4) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 4;
+  static constexpr int DIM = 3;  // 3D space
+  static constexpr int N = 4;    // 4 control points (cubic spline)
 
+  // Create spline over 2 second interval
   basalt::RdSpline<DIM, N> spline(int64_t(2e9));
   spline.genRandomTrajectory(3 * N);
 
+  // Test at 100ms intervals, avoiding boundary points
   for (int64_t t_ns = 1e8; t_ns < spline.maxTimeNs() - 1e8; t_ns += 1e8) {
-    testTimeDeriv<DIM, N, 1>(spline, t_ns);
+    testTimeDeriv<DIM, N, 1>(spline, t_ns);  // 1 indicates velocity derivatives
   }
 }
 
+/**
+ * @brief Tests R^d B-spline velocity time derivatives with 5 control points
+ *
+ * Tests the time derivatives of velocity for a quartic B-spline in R^d.
+ * Higher order allows for smoother derivative transitions.
+ */
 TEST(SplineTest, UBSplineVelocityTimeDeriv5) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 5;
+  static constexpr int DIM = 3;  // 3D space
+  static constexpr int N = 5;    // 5 control points (quartic spline)
 
+  // Create spline over 2 second interval
   basalt::RdSpline<DIM, N> spline(int64_t(2e9));
   spline.genRandomTrajectory(3 * N);
 
+  // Test at 100ms intervals, avoiding boundary points
   for (int64_t t_ns = 1e8; t_ns < spline.maxTimeNs() - 1e8; t_ns += 1e8) {
-    testTimeDeriv<DIM, N, 1>(spline, t_ns);
+    testTimeDeriv<DIM, N, 1>(spline, t_ns);  // 1 indicates velocity derivatives
   }
 }
 
+/**
+ * @brief Tests R^d B-spline velocity time derivatives with 6 control points
+ *
+ * Tests the time derivatives of velocity for a quintic B-spline in R^d.
+ * Highest order tested, providing smoothest derivative transitions.
+ */
 TEST(SplineTest, UBSplineVelocityTimeDeriv6) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 6;
+  static constexpr int DIM = 3;  // 3D space
+  static constexpr int N = 6;    // 6 control points (quintic spline)
 
+  // Create spline over 2 second interval
   basalt::RdSpline<DIM, N> spline(int64_t(2e9));
   spline.genRandomTrajectory(3 * N);
 
+  // Test at 100ms intervals, avoiding boundary points
   for (int64_t t_ns = 1e8; t_ns < spline.maxTimeNs() - 1e8; t_ns += 1e8) {
-    testTimeDeriv<DIM, N, 1>(spline, t_ns);
+    testTimeDeriv<DIM, N, 1>(spline, t_ns);  // 1 indicates velocity derivatives
   }
 }
 
+/**
+ * @brief Tests SO(3) B-spline acceleration Jacobians with 4 control points
+ *
+ * Tests the Jacobians of angular acceleration with respect to control points
+ * for a cubic B-spline on SO(3). Verifies that analytical Jacobians match
+ * numerical ones.
+ */
 TEST(SplineTest, SO3CUBSplineAccelerationKnots4) {
-  static constexpr int N = 4;
+  static constexpr int N = 4;  // 4 control points (cubic spline)
 
+  // Create spline over 2 second interval
   basalt::So3Spline<N> spline(int64_t(2e9));
   spline.genRandomTrajectory(3 * N);
 
+  // Test at 100ms intervals
   for (int64_t t_ns = 0; t_ns < spline.maxTimeNs(); t_ns += 1e8) {
     testEvaluateSo3Accel(spline, t_ns);
   }
 }
 
+/**
+ * @brief Tests SO(3) B-spline acceleration Jacobians with 5 control points
+ *
+ * Tests the Jacobians of angular acceleration with respect to control points
+ * for a quartic B-spline on SO(3). Higher order allows for more accurate
+ * acceleration control.
+ */
 TEST(SplineTest, SO3CUBSplineAccelerationKnots5) {
-  static constexpr int N = 5;
+  static constexpr int N = 5;  // 5 control points (quartic spline)
 
+  // Create spline over 2 second interval
   basalt::So3Spline<N> spline(int64_t(2e9));
   spline.genRandomTrajectory(3 * N);
 
+  // Test at 100ms intervals
   for (int64_t t_ns = 0; t_ns < spline.maxTimeNs(); t_ns += 1e8) {
     testEvaluateSo3Accel(spline, t_ns);
   }
 }
 
+/**
+ * @brief Tests SO(3) B-spline acceleration Jacobians with 6 control points
+ *
+ * Tests the Jacobians of angular acceleration with respect to control points
+ * for a quintic B-spline on SO(3). Highest order tested, allowing for
+ * very precise acceleration control.
+ */
 TEST(SplineTest, SO3CUBSplineAccelerationKnots6) {
-  static constexpr int N = 6;
+  static constexpr int N = 6;  // 6 control points (quintic spline)
 
+  // Create spline over 2 second interval
   basalt::So3Spline<N> spline(int64_t(2e9));
   spline.genRandomTrajectory(3 * N);
 
+  // Test at 100ms intervals
   for (int64_t t_ns = 0; t_ns < spline.maxTimeNs(); t_ns += 1e8) {
     testEvaluateSo3Accel(spline, t_ns);
   }

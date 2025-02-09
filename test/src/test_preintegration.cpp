@@ -155,17 +155,24 @@ TEST(ImuPreintegrationTestCase, PredictJacobiansTest) {
   int64_t dt_ns = 1e7;
   for (int64_t t_ns = dt_ns / 2; t_ns < gt_spline.maxTimeNs() - int64_t(1e9);
        t_ns += dt_ns) {
+    // Get ground truth pose at current time
     Sophus::SE3d pose = gt_spline.pose(t_ns);
+
+    // Convert world frame acceleration to body frame and remove gravity
     Eigen::Vector3d accel_body =
         pose.so3().inverse() *
         (gt_spline.transAccelWorld(t_ns) - basalt::constants::G);
+
+    // Get angular velocity in body frame
     Eigen::Vector3d rot_vel_body = gt_spline.rotVelBody(t_ns);
 
+    // Create IMU measurement
     basalt::ImuData<double> data;
     data.accel = accel_body;
     data.gyro = rot_vel_body;
     data.t_ns = t_ns + dt_ns / 2;  // measurement in the middle of the interval;
 
+    // Propagate state using the preintegration
     basalt::PoseVelState<double> next_state;
 
     int64_t curr_state_t_ns = t_ns - dt_ns / 2;
@@ -173,6 +180,7 @@ TEST(ImuPreintegrationTestCase, PredictJacobiansTest) {
         curr_state_t_ns, gt_spline.pose(curr_state_t_ns),
         gt_spline.transVelWorld(curr_state_t_ns));
 
+    // Compute Jacobians of the propagated state
     basalt::IntegratedImuMeasurement<double>::MatNN d_next_d_curr;
     basalt::IntegratedImuMeasurement<double>::MatN3 d_next_d_accel;
     basalt::IntegratedImuMeasurement<double>::MatN3 d_next_d_gyro;
@@ -181,6 +189,7 @@ TEST(ImuPreintegrationTestCase, PredictJacobiansTest) {
         curr_state, data, next_state, &d_next_d_curr, &d_next_d_accel,
         &d_next_d_gyro);
 
+    // Test Jacobian computation using finite differences
     {
       basalt::PoseVelState<double>::VecN x0;
       x0.setZero();
@@ -243,65 +252,89 @@ TEST(ImuPreintegrationTestCase, PredictJacobiansTest) {
  * Computes the Jacobians for residuals and compares them to the numeric Jacobians.
  */
 TEST(ImuPreintegrationTestCase, ResidualJacobiansTest) {
+  // Number of control points for the spline trajectory
   int num_knots = 15;
 
+  // Initialize random gyroscope and accelerometer biases
+  // Scale down to realistic values: gyro bias ~0.01 rad/s, accel bias ~0.1 m/s^2
   Eigen::Vector3d bg;
   Eigen::Vector3d ba;
-  bg = Eigen::Vector3d::Random() / 100;
-  ba = Eigen::Vector3d::Random() / 10;
+  bg = Eigen::Vector3d::Random() / 100;    // Gyroscope bias
+  ba = Eigen::Vector3d::Random() / 10;     // Accelerometer bias
 
+  // Create IMU measurement integrator with initial biases
   basalt::IntegratedImuMeasurement<double> imu_meas(0, bg, ba);
 
+  // Create ground truth trajectory using a cubic B-spline
+  // Time span of 10 seconds (10e9 nanoseconds)
   basalt::Se3Spline<5> gt_spline(int64_t(10e9));
   gt_spline.genRandomTrajectory(num_knots);
 
-  basalt::PoseVelState<double> state0;
-  basalt::PoseVelState<double> state1;
-  basalt::PoseVelState<double> state1_gt;
+  // States for testing: initial, predicted, and ground truth
+  basalt::PoseVelState<double> state0;      // Initial state
+  basalt::PoseVelState<double> state1;      // State to test Jacobians
+  basalt::PoseVelState<double> state1_gt;   // Ground truth final state
 
-  state0.T_w_i = gt_spline.pose(int64_t(0));
-  state0.vel_w_i = gt_spline.transVelWorld(int64_t(0));
+  // Set initial state from spline at t=0
+  state0.T_w_i = gt_spline.pose(int64_t(0));           // Initial pose
+  state0.vel_w_i = gt_spline.transVelWorld(int64_t(0)); // Initial velocity
 
-  int64_t dt_ns = 1e7;
+  // Generate and integrate IMU measurements along the trajectory
+  int64_t dt_ns = 1e7;  // 10ms measurement interval
   for (int64_t t_ns = dt_ns / 2;
-       t_ns < int64_t(1e8);  //  gt_spline.maxTimeNs() - int64_t(1e9);
+       t_ns < int64_t(1e8);  // Integrate for 0.1s
        t_ns += dt_ns) {
+    // Get ground truth pose at current time
     Sophus::SE3d pose = gt_spline.pose(t_ns);
+    
+    // Convert world frame acceleration to body frame and remove gravity
     Eigen::Vector3d accel_body =
         pose.so3().inverse() *
         (gt_spline.transAccelWorld(t_ns) - basalt::constants::G);
+    
+    // Get angular velocity in body frame
     Eigen::Vector3d rot_vel_body = gt_spline.rotVelBody(t_ns);
 
+    // Create IMU measurement by adding biases
     basalt::ImuData<double> data;
-    data.accel = accel_body + ba;
-    data.gyro = rot_vel_body + bg;
-    data.t_ns = t_ns + dt_ns / 2;  // measurement in the middle of the interval;
+    data.accel = accel_body + ba;           // Add accelerometer bias
+    data.gyro = rot_vel_body + bg;          // Add gyroscope bias
+    data.t_ns = t_ns + dt_ns / 2;           // Timestamp at middle of interval
 
+    // Integrate measurement with unit covariance
     imu_meas.integrate(data, Eigen::Vector3d::Ones(), Eigen::Vector3d::Ones());
   }
 
+  // Set ground truth final state from spline
   state1_gt.T_w_i = gt_spline.pose(imu_meas.get_dt_ns());
   state1_gt.vel_w_i = gt_spline.transVelWorld(imu_meas.get_dt_ns());
 
+  // Compute residual with ground truth states - should be near zero
   basalt::PoseVelState<double>::VecN res_gt =
       imu_meas.residual(state0, basalt::constants::G, state1_gt, bg, ba);
 
+  // Verify residual is small (less than 1e-6)
   EXPECT_LE(res_gt.array().abs().maxCoeff(), 1e-6)
       << "res_gt " << res_gt.transpose();
 
+  // Create perturbed final state for Jacobian testing
+  // Add small random perturbations to pose and velocity
   state1.T_w_i = gt_spline.pose(imu_meas.get_dt_ns()) *
-                 Sophus::se3_expd(Sophus::Vector6d::Random() / 10);
+                 Sophus::se3_expd(Sophus::Vector6d::Random() / 10);  // ~0.1 perturbation
   state1.vel_w_i = gt_spline.transVelWorld(imu_meas.get_dt_ns()) +
-                   Sophus::Vector3d::Random() / 10;
+                   Sophus::Vector3d::Random() / 10;                  // ~0.1 m/s perturbation
 
-  basalt::IntegratedImuMeasurement<double>::MatNN d_res_d_state0;
-  basalt::IntegratedImuMeasurement<double>::MatNN d_res_d_state1;
-  basalt::IntegratedImuMeasurement<double>::MatN3 d_res_d_bg;
-  basalt::IntegratedImuMeasurement<double>::MatN3 d_res_d_ba;
+  // Matrices to store computed Jacobians
+  basalt::IntegratedImuMeasurement<double>::MatNN d_res_d_state0;  // wrt initial state
+  basalt::IntegratedImuMeasurement<double>::MatNN d_res_d_state1;  // wrt final state
+  basalt::IntegratedImuMeasurement<double>::MatN3 d_res_d_bg;      // wrt gyro bias
+  basalt::IntegratedImuMeasurement<double>::MatN3 d_res_d_ba;      // wrt accel bias
 
+  // Compute residual and all Jacobians
   imu_meas.residual(state0, basalt::constants::G, state1, bg, ba,
                     &d_res_d_state0, &d_res_d_state1, &d_res_d_bg, &d_res_d_ba);
 
+  // Test Jacobian with respect to initial state
   {
     basalt::PoseVelState<double>::VecN x0;
     x0.setZero();
@@ -309,7 +342,7 @@ TEST(ImuPreintegrationTestCase, ResidualJacobiansTest) {
         "d_res_d_state0", d_res_d_state0,
         [&](const basalt::PoseVelState<double>::VecN& x) {
           basalt::PoseVelState<double> state0_new = state0;
-          state0_new.applyInc(x);
+          state0_new.applyInc(x);  // Apply increment to initial state
 
           return imu_meas.residual(state0_new, basalt::constants::G, state1, bg,
                                    ba);
@@ -317,6 +350,7 @@ TEST(ImuPreintegrationTestCase, ResidualJacobiansTest) {
         x0);
   }
 
+  // Test Jacobian with respect to final state
   {
     basalt::PoseVelState<double>::VecN x0;
     x0.setZero();
@@ -324,7 +358,7 @@ TEST(ImuPreintegrationTestCase, ResidualJacobiansTest) {
         "d_res_d_state1", d_res_d_state1,
         [&](const basalt::PoseVelState<double>::VecN& x) {
           basalt::PoseVelState<double> state1_new = state1;
-          state1_new.applyInc(x);
+          state1_new.applyInc(x);  // Apply increment to final state
 
           return imu_meas.residual(state0, basalt::constants::G, state1_new, bg,
                                    ba);
@@ -332,6 +366,7 @@ TEST(ImuPreintegrationTestCase, ResidualJacobiansTest) {
         x0);
   }
 
+  // Test Jacobian with respect to gyroscope bias
   {
     Sophus::Vector3d x0;
     x0.setZero();
@@ -344,6 +379,7 @@ TEST(ImuPreintegrationTestCase, ResidualJacobiansTest) {
         x0);
   }
 
+  // Test Jacobian with respect to accelerometer bias
   {
     Sophus::Vector3d x0;
     x0.setZero();
@@ -363,37 +399,51 @@ TEST(ImuPreintegrationTestCase, ResidualJacobiansTest) {
  * Verifies that the residual Jacobians for gyroscope and accelerometer biases are computed correctly by comparing them to the numeric Jacobians
  */
 TEST(ImuPreintegrationTestCase, BiasResidualJacobiansTest) {
+  // Number of control points for the spline trajectory
   int num_knots = 15;
 
+  // Initialize random gyroscope and accelerometer biases
+  // Scale down to realistic values: gyro bias ~0.01 rad/s, accel bias ~0.1 m/s^2
   Eigen::Vector3d bg;
   Eigen::Vector3d ba;
   bg = Eigen::Vector3d::Random() / 100;
   ba = Eigen::Vector3d::Random() / 10;
 
+  // Create ground truth trajectory using a cubic B-spline over 10 seconds
   basalt::Se3Spline<5> gt_spline(int64_t(10e9));
   gt_spline.genRandomTrajectory(num_knots);
 
-  Eigen::aligned_vector<Eigen::Vector3d> accel_data_vec;
-  Eigen::aligned_vector<Eigen::Vector3d> gyro_data_vec;
-  Eigen::aligned_vector<int64_t> timestamps_vec;
+  // Vectors to store synthetic IMU measurements
+  Eigen::aligned_vector<Eigen::Vector3d> accel_data_vec;  // Accelerometer readings
+  Eigen::aligned_vector<Eigen::Vector3d> gyro_data_vec;   // Gyroscope readings
+  Eigen::aligned_vector<int64_t> timestamps_vec;          // Measurement timestamps
 
-  int64_t dt_ns = 1e7;
+  // Generate synthetic IMU measurements from the ground truth trajectory
+  int64_t dt_ns = 1e7;  // 10ms measurement interval
   for (int64_t t_ns = dt_ns / 2;
-       t_ns < int64_t(1e9);  //  gt_spline.maxTimeNs() - int64_t(1e9);
+       t_ns < int64_t(1e9);  // Integrate for 1 second
        t_ns += dt_ns) {
+    // Get ground truth pose at current time
     Sophus::SE3d pose = gt_spline.pose(t_ns);
+    
+    // Convert world frame acceleration to body frame and remove gravity
     Eigen::Vector3d accel_body =
         pose.so3().inverse() *
         (gt_spline.transAccelWorld(t_ns) - basalt::constants::G);
+    
+    // Get angular velocity in body frame
     Eigen::Vector3d rot_vel_body = gt_spline.rotVelBody(t_ns);
 
-    accel_data_vec.emplace_back(accel_body + ba);
-    gyro_data_vec.emplace_back(rot_vel_body + bg);
-    timestamps_vec.emplace_back(t_ns + dt_ns / 2);
+    // Store measurements with added biases
+    accel_data_vec.emplace_back(accel_body + ba);  // Add accelerometer bias
+    gyro_data_vec.emplace_back(rot_vel_body + bg); // Add gyroscope bias
+    timestamps_vec.emplace_back(t_ns + dt_ns / 2);  // Store timestamp at interval midpoint
   }
 
+  // Create IMU measurement integrator with initial biases
   basalt::IntegratedImuMeasurement<double> imu_meas(0, bg, ba);
 
+  // Integrate all IMU measurements with unit covariance
   for (size_t i = 0; i < timestamps_vec.size(); i++) {
     basalt::ImuData<double> data;
     data.accel = accel_data_vec[i];
@@ -403,19 +453,24 @@ TEST(ImuPreintegrationTestCase, BiasResidualJacobiansTest) {
     imu_meas.integrate(data, Eigen::Vector3d::Ones(), Eigen::Vector3d::Ones());
   }
 
-  basalt::IntegratedImuMeasurement<double>::MatN3 d_res_d_ba;
-  basalt::IntegratedImuMeasurement<double>::MatN3 d_res_d_bg;
+  // Matrices to store Jacobians (not used directly but declared for clarity)
+  basalt::IntegratedImuMeasurement<double>::MatN3 d_res_d_ba;  // wrt accel bias
+  basalt::IntegratedImuMeasurement<double>::MatN3 d_res_d_bg;  // wrt gyro bias
 
+  // Get the delta state (change in state over integration period)
   basalt::PoseVelState<double> delta_state = imu_meas.getDeltaState();
 
+  // Test Jacobian with respect to gyroscope bias
   {
     Sophus::Vector3d x0;
     x0.setZero();
     test_jacobian(
         "d_res_d_bg", imu_meas.get_d_state_d_bg(),
         [&](const Sophus::Vector3d& x) {
+          // Create new integrator with perturbed gyro bias
           basalt::IntegratedImuMeasurement<double> imu_meas1(0, bg + x, ba);
 
+          // Integrate the same measurements with perturbed bias
           for (size_t i = 0; i < timestamps_vec.size(); i++) {
             basalt::ImuData<double> data;
             data.accel = accel_data_vec[i];
@@ -426,20 +481,24 @@ TEST(ImuPreintegrationTestCase, BiasResidualJacobiansTest) {
                                 Eigen::Vector3d::Ones());
           }
 
+          // Compare delta states to compute numerical derivative
           basalt::PoseVelState<double> delta_state1 = imu_meas1.getDeltaState();
           return delta_state.diff(delta_state1);
         },
         x0);
   }
 
+  // Test Jacobian with respect to accelerometer bias
   {
     Sophus::Vector3d x0;
     x0.setZero();
     test_jacobian(
         "d_res_d_ba", imu_meas.get_d_state_d_ba(),
         [&](const Sophus::Vector3d& x) {
+          // Create new integrator with perturbed accelerometer bias
           basalt::IntegratedImuMeasurement<double> imu_meas1(0, bg, ba + x);
 
+          // Integrate the same measurements with perturbed bias
           for (size_t i = 0; i < timestamps_vec.size(); i++) {
             basalt::ImuData<double> data;
             data.accel = accel_data_vec[i];
@@ -450,6 +509,7 @@ TEST(ImuPreintegrationTestCase, BiasResidualJacobiansTest) {
                                 Eigen::Vector3d::Ones());
           }
 
+          // Compare delta states to compute numerical derivative
           basalt::PoseVelState<double> delta_state1 = imu_meas1.getDeltaState();
           return delta_state.diff(delta_state1);
         },
@@ -994,43 +1054,51 @@ TEST(ImuPreintegrationTestCase, TimeConsistency) {
  * 3. Checks the effect on transformed points
  */
 TEST(ImuPreintegrationTestCase, LargeRotation) {
-  // Test behavior with large rotations
+  // Initialize start time at 1s in nanoseconds for better numerical stability
   const int64_t start_t_ns = 1000000000;  // 1s
+  
+  // Create IMU measurement integrator with zero initial biases
   basalt::IntegratedImuMeasurement<double> imu_meas(start_t_ns, 
-                                                   Eigen::Vector3d::Zero(),
-                                                   Eigen::Vector3d::Zero());
+                                                   Eigen::Vector3d::Zero(),  // Initial accelerometer bias
+                                                   Eigen::Vector3d::Zero()); // Initial gyroscope bias
 
-  // Create multiple measurements to simulate a quarter rotation
-  const int num_steps = 100;
-  const double dt = 0.01;  // 10ms per step
-  const double omega = M_PI/2;  // Quarter rotation per second
+  // Simulation parameters for a quarter rotation around z-axis
+  const int num_steps = 100;              // Number of discrete integration steps
+  const double dt = 0.01;                 // Time step in seconds (10ms)
+  const double omega = M_PI/2;            // Angular velocity for 90-degree rotation in 1s
 
+  // Generate and integrate IMU measurements for the rotation
   for (int i = 0; i < num_steps; i++) {
     basalt::ImuData<double> data;
-    data.t_ns = start_t_ns + (i + 1) * int64_t(dt * 1e9);  // Convert to nanoseconds
-    data.accel = Eigen::Vector3d(0, 0, 9.81);  // Cancel gravity
-    data.gyro = Eigen::Vector3d(0, 0, omega);  // Constant angular velocity
+    // Convert time step to nanoseconds for precise timing
+    data.t_ns = start_t_ns + (i + 1) * int64_t(dt * 1e9);
+    data.accel = Eigen::Vector3d(0, 0, 9.81);  // Apply upward acceleration to cancel gravity
+    data.gyro = Eigen::Vector3d(0, 0, omega);  // Apply constant angular velocity around z-axis
 
+    // Integrate measurement with unit noise characteristics
     imu_meas.integrate(data, Eigen::Vector3d::Ones(), Eigen::Vector3d::Ones());
   }
 
-  basalt::PoseVelState<double> state0;
-  basalt::PoseVelState<double> state1;
-  state0.T_w_i = Sophus::SE3d();
-  state0.vel_w_i = Eigen::Vector3d::Zero();
+  // Initialize states for prediction
+  basalt::PoseVelState<double> state0;    // Initial state
+  basalt::PoseVelState<double> state1;    // State after integration
+  state0.T_w_i = Sophus::SE3d();          // Identity transformation (no initial rotation/translation)
+  state0.vel_w_i = Eigen::Vector3d::Zero(); // Zero initial velocity
 
+  // Predict final state using integrated measurements
   imu_meas.predictState(state0, basalt::constants::G, state1);
 
-  // Check that we completed approximately a quarter rotation
+  // Compute and verify rotation angle between initial and final states
   Eigen::Matrix3d R_diff = state0.T_w_i.rotationMatrix().transpose() * 
                           state1.T_w_i.rotationMatrix();
   double angle = std::abs(Eigen::AngleAxisd(R_diff).angle());
-  EXPECT_NEAR(angle, M_PI/2, 1e-6);  // Allow for some numerical error
+  EXPECT_NEAR(angle, M_PI/2, 1e-6);  // Verify 90-degree rotation with small tolerance
 
-  // Also verify that a point rotated by this transformation is approximately correct
-  Eigen::Vector3d p0(1, 0, 0);
+  // Verify rotation effect on a unit vector along x-axis
+  // After 90-degree CCW rotation around z, (1,0,0) should become (0,1,0)
+  Eigen::Vector3d p0(1, 0, 0);  // Initial point along x-axis
   Eigen::Vector3d p1 = state1.T_w_i.rotationMatrix() * p0;
-  EXPECT_NEAR(p1[0], 0, 1e-6);  // Should be close to (0,1,0)
-  EXPECT_NEAR(p1[1], 1, 1e-6);
-  EXPECT_NEAR(p1[2], 0, 1e-6);
+  EXPECT_NEAR(p1[0], 0, 1e-6);  // x-component should be 0
+  EXPECT_NEAR(p1[1], 1, 1e-6);  // y-component should be 1
+  EXPECT_NEAR(p1[2], 0, 1e-6);  // z-component should remain 0
 }

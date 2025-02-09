@@ -669,72 +669,87 @@ TEST(ImuPreintegrationTestCase, ResidualBiasTest) {
  * Uses KL-divergence to compare the computed covariance with the one computed analytically.
  */
 TEST(ImuPreintegrationTestCase, CovarianceTest) {
+  // Number of control points for the spline trajectory
   int num_knots = 15;
 
+  // Create ground truth trajectory using a cubic B-spline over 10 seconds
   basalt::Se3Spline<5> gt_spline(int64_t(10e9));
   gt_spline.genRandomTrajectory(num_knots);
 
-  Eigen::aligned_vector<Eigen::Vector3d> accel_data_vec;
-  Eigen::aligned_vector<Eigen::Vector3d> gyro_data_vec;
-  Eigen::aligned_vector<int64_t> timestamps_vec;
+  // Vectors to store noise-free IMU measurements
+  Eigen::aligned_vector<Eigen::Vector3d> accel_data_vec;  // Accelerometer readings
+  Eigen::aligned_vector<Eigen::Vector3d> gyro_data_vec;   // Gyroscope readings
+  Eigen::aligned_vector<int64_t> timestamps_vec;          // Measurement timestamps
 
-  int64_t dt_ns = 1e7;
+  // Generate synthetic IMU measurements from the ground truth trajectory
+  int64_t dt_ns = 1e7;  // 10ms measurement interval
   for (int64_t t_ns = dt_ns / 2;
-       t_ns < int64_t(1e9);  //  gt_spline.maxTimeNs() - int64_t(1e9);
+       t_ns < int64_t(1e9);  // Integrate for 1 second
        t_ns += dt_ns) {
+    // Get ground truth pose at current time
     Sophus::SE3d pose = gt_spline.pose(t_ns);
+    
+    // Convert world frame acceleration to body frame and remove gravity
     Eigen::Vector3d accel_body =
         pose.so3().inverse() *
         (gt_spline.transAccelWorld(t_ns) - basalt::constants::G);
+    
+    // Get angular velocity in body frame
     Eigen::Vector3d rot_vel_body = gt_spline.rotVelBody(t_ns);
 
+    // Store noise-free measurements
     accel_data_vec.emplace_back(accel_body);
     gyro_data_vec.emplace_back(rot_vel_body);
-    timestamps_vec.emplace_back(t_ns + dt_ns / 2);
+    timestamps_vec.emplace_back(t_ns + dt_ns / 2);  // Store timestamp at interval midpoint
   }
 
+  // Set measurement covariances (variance = std_dev^2)
   Eigen::Vector3d accel_cov;
   Eigen::Vector3d gyro_cov;
-  accel_cov.setConstant(ACCEL_STD_DEV * ACCEL_STD_DEV);
-  gyro_cov.setConstant(GYRO_STD_DEV * GYRO_STD_DEV);
+  accel_cov.setConstant(ACCEL_STD_DEV * ACCEL_STD_DEV);  // Accelerometer measurement variance
+  gyro_cov.setConstant(GYRO_STD_DEV * GYRO_STD_DEV);     // Gyroscope measurement variance
 
+  // Create IMU measurement integrator with zero initial biases
   basalt::IntegratedImuMeasurement<double> imu_meas(0, Eigen::Vector3d::Zero(),
                                                     Eigen::Vector3d::Zero());
 
+  // Integrate noise-free measurements to get reference delta state
   for (size_t i = 0; i < timestamps_vec.size(); i++) {
     basalt::ImuData<double> data;
     data.accel = accel_data_vec[i];
     data.gyro = gyro_data_vec[i];
     data.t_ns = timestamps_vec[i];
 
-    // std::cerr << "data.accel " << data.accel.transpose() << std::endl;
-
-    // std::cerr << "cov " << i << "\n" << imu_meas.get_cov() << std::endl;
     imu_meas.integrate(data, accel_cov, gyro_cov);
   }
 
-  // std::cerr << "cov\n" << imu_meas.get_cov() << std::endl;
-
+  // Get reference delta state from noise-free integration
   basalt::PoseVelState<double> delta_state = imu_meas.getDeltaState();
 
+  // Matrix to accumulate empirical covariance from Monte Carlo samples
   basalt::IntegratedImuMeasurement<double>::MatNN cov_computed;
   cov_computed.setZero();
 
-  const int num_samples = 1000;
+  // Monte Carlo simulation to estimate covariance
+  const int num_samples = 1000;  // Number of Monte Carlo iterations
   for (int i = 0; i < num_samples; i++) {
+    // Create new integrator for each Monte Carlo iteration
     basalt::IntegratedImuMeasurement<double> imu_meas1(
         0, Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());
 
+    // Integrate measurements with added random noise
     for (size_t i = 0; i < timestamps_vec.size(); i++) {
       basalt::ImuData<double> data;
       data.accel = accel_data_vec[i];
       data.gyro = gyro_data_vec[i];
       data.t_ns = timestamps_vec[i];
 
+      // Add Gaussian noise to accelerometer measurements
       data.accel[0] += accel_noise_dist(gen);
       data.accel[1] += accel_noise_dist(gen);
       data.accel[2] += accel_noise_dist(gen);
 
+      // Add Gaussian noise to gyroscope measurements
       data.gyro[0] += gyro_noise_dist(gen);
       data.gyro[1] += gyro_noise_dist(gen);
       data.gyro[2] += gyro_noise_dist(gen);
@@ -742,32 +757,39 @@ TEST(ImuPreintegrationTestCase, CovarianceTest) {
       imu_meas1.integrate(data, accel_cov, gyro_cov);
     }
 
+    // Get delta state from noisy integration
     basalt::PoseVelState<double> delta_state1 = imu_meas1.getDeltaState();
 
+    // Compute difference between noisy and reference states
     basalt::PoseVelState<double>::VecN diff = delta_state.diff(delta_state1);
 
+    // Accumulate outer product for covariance computation
     cov_computed += diff * diff.transpose();
   }
 
+  // Compute empirical covariance by averaging
   cov_computed /= num_samples;
-  // std::cerr << "cov_computed\n" << cov_computed << std::endl;
 
+  // Compute Kullback-Leibler divergence between analytical and empirical covariances
+  // KL = tr(Σ₁⁻¹Σ₂) - n + ln(|Σ₁|/|Σ₂|), where Σ₁ is analytical and Σ₂ is empirical
   double kl =
       (imu_meas.get_cov_inv() * cov_computed).trace() - 9 +
       std::log(imu_meas.get_cov().determinant() / cov_computed.determinant());
 
-  // std::cerr << "kl " << kl << std::endl;
+  // Verify that analytical and empirical covariances are similar (small KL divergence)
   EXPECT_LE(kl, 0.08);
 
+  // Verify random number generator properties
   Eigen::VectorXd test_vec(num_samples);
   for (int i = 0; i < num_samples; i++) {
     test_vec[i] = accel_noise_dist(gen);
   }
 
+  // Check that generated noise follows expected distribution
   double mean = test_vec.mean();
   double var = (test_vec.array() - mean).square().sum() / num_samples;
 
-  // Small test for rangdom generator
+  // Verify that sample standard deviation is close to specified value
   EXPECT_LE(std::abs(std::sqrt(var) - ACCEL_STD_DEV), 0.03);
 }
 

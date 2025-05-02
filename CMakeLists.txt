@@ -169,6 +169,7 @@ target_sources(basalt-headers
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/serialization/headers_serialization.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/spline/ceres_local_param.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/spline/ceres_spline_helper.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/spline/rd_bezier.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/spline/rd_spline.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/spline/se3_spline.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/spline/so3_spline.h

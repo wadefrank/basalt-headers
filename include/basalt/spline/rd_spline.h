@@ -305,7 +305,7 @@ class RdSpline {
 
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
- protected:
+  // protected:
   /// @brief Vector of derivatives of time polynomial.
   ///
   /// Computes a derivative of \f$ \begin{bmatrix}1 & t & t^2 & \dots &

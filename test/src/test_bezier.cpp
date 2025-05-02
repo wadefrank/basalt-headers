@@ -31,11 +31,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 #include <basalt/spline/spline_common.h>
+#include <iostream>
+#include "Eigen/Core"
 #include "basalt/spline/rd_bezier.h"
+#include "basalt/spline/rd_spline.h"
 #include "gtest/gtest.h"
 #include "test_utils.h"
-
-
 
 template <int DIM, int N, int DERIV>
 void testEvaluate(const basalt::RdBezier<DIM, N> &spline, int64_t t_ns) {
@@ -91,6 +92,69 @@ void testTimeDeriv(const basalt::RdBezier<DIM, N> &spline, int64_t t_ns) {
       x0);
 }
 
+template <int DIM, int N, int DERIV>
+void testEquality(const basalt::RdBezier<DIM, N> &bezier,
+                  const basalt::RdSpline<DIM, N> &spline, int64_t t_ns) {
+  using VectorD = typename basalt::RdBezier<DIM, N>::VecD;
+
+  VectorD res1 = bezier.template evaluate<DERIV>(t_ns);
+  VectorD res2 = spline.template evaluate<DERIV>(t_ns);
+
+  EXPECT_TRUE(res1.isApprox(res2, 1e-8))
+      << "res1 " << res1.transpose() << " res2 " << res2.transpose()
+      << std::endl;
+}
+
+template <int DIM, int N, int DERIV>
+void testEvaluateSplineTransform() {
+  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
+  spline.genRandomTrajectory(N, false);
+
+  typename basalt::RdSpline<DIM, N>::MatN transform =
+      basalt::RdSpline<DIM, N>::BLENDING_MATRIX *
+      basalt::RdBezier<DIM, N>::INV_BLENDING_MATRIX;
+
+  Eigen::Matrix<double, DIM, N> tmp;
+
+  for (int i = 0; i < N; i++) {
+    typename basalt::RdSpline<DIM, N>::VecD knot = spline.getKnot(i);
+    for (int j = 0; j < DIM; j++) {
+      tmp(j, i) = knot[j];
+    }
+  }
+  tmp *= transform;
+
+  basalt::RdBezier<DIM, N> bezier(spline.getTimeIntervalNs());
+  for (int i = 0; i < N; i++) {
+    typename basalt::RdSpline<DIM, N>::VecD knot;
+    for (int j = 0; j < DIM; j++) {
+      knot[j] = tmp(j, i);
+    }
+    bezier.getKnot(i) = knot;
+  }
+
+  for (int64_t t_ns = 0; t_ns < spline.maxTimeNs(); t_ns += 1e8) {
+    testEquality<DIM, N, DERIV>(bezier, spline, t_ns);
+  }
+}
+
+TEST(BezierTest, UBBezierBsplineKnotTransforme4) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 4;
+  testEvaluateSplineTransform<DIM, N, 0>();
+}
+
+TEST(BezierTest, UBBezierBsplineKnotTransforme5) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 5;
+  testEvaluateSplineTransform<DIM, N, 0>();
+}
+
+TEST(BezierTest, UBBezierBsplineKnotTransforme6) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 6;
+  testEvaluateSplineTransform<DIM, N, 0>();
+}
 
 TEST(BezierTest, UBBezierEvaluateKnots4) {
   static constexpr int DIM = 3;

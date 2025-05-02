@@ -49,7 +49,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 namespace basalt {
 
-/// @brief Uniform Bezier curve for euclidean vectors with dimention DIM of order
+/// @brief Uniform Bezier curve for euclidean vectors with dimention DIM of
+/// order
 /// N
 template <int _DIM, int _N, typename _Scalar = double>
 class RdBezier {
@@ -84,7 +85,6 @@ class RdBezier {
   /// @param[in] start_time_ns start time of the spline in nanoseconds
   RdBezier(int64_t time_interval_ns, int64_t start_time_ns = 0)
       : dt_ns_(time_interval_ns), start_t_ns_(start_time_ns) {
-
     pow_inv_dt_[0] = 1.0;
     pow_inv_dt_[1] = S_TO_NS / dt_ns_;
 
@@ -232,7 +232,7 @@ class RdBezier {
 
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
- //protected:
+  // protected:
   /// @brief Vector of derivatives of time polynomial.
   ///
   /// Computes a derivative of \f$ \begin{bmatrix}1 & t & t^2 & \dots &
@@ -268,8 +268,8 @@ class RdBezier {
   static const MatN
       BLENDING_MATRIX;  ///< Blending matrix. See \ref computeBlendingMatrix.
 
-  static const MatN
-      INV_BLENDING_MATRIX;  ///< Inverse blending matrix. See \ref computeBlendingMatrix.
+  static const MatN INV_BLENDING_MATRIX;  ///< Inverse blending matrix. See \ref
+                                          ///< computeBlendingMatrix.
 
   static const MatN BASE_COEFFICIENTS;  ///< Base coefficients matrix.
                                         ///< See \ref computeBaseCoefficients.
@@ -291,8 +291,8 @@ const typename RdBezier<_DIM, _N, _Scalar>::MatN
         computeBlendingMatrixBezier<_N, _Scalar>();
 
 template <int _DIM, int _N, typename _Scalar>
-  const typename RdBezier<_DIM, _N, _Scalar>::MatN
-      RdBezier<_DIM, _N, _Scalar>::INV_BLENDING_MATRIX =
-         computeBlendingMatrixBezier<_N, _Scalar>().inverse();
+const typename RdBezier<_DIM, _N, _Scalar>::MatN
+    RdBezier<_DIM, _N, _Scalar>::INV_BLENDING_MATRIX =
+        computeBlendingMatrixBezier<_N, _Scalar>().inverse();
 
 }  // namespace basalt

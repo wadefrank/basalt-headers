@@ -111,7 +111,8 @@ Eigen::Matrix<_Scalar, _N, _N> computeBlendingMatrixBezier() {
   for (int i = 0; i < _N; ++i) {
     for (int j = 0; j < _N; ++j) {
       if (i >= j) {
-        m(j, i) = std::pow(-1.0, i - j) * binomialCoefficient(_N - 1, j) * binomialCoefficient(_N - 1 - j, i - j);
+        m(j, i) = std::pow(-1.0, i - j) * binomialCoefficient(_N - 1, j) *
+                  binomialCoefficient(_N - 1 - j, i - j);
       }
     }
   }

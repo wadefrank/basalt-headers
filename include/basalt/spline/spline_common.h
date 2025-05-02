@@ -99,6 +99,26 @@ Eigen::Matrix<_Scalar, _N, _N> computeBlendingMatrix() {
   return (m / factorial).template cast<_Scalar>();
 }
 
+/// @brief Compute blending matrix for uniform Bezier curve evaluation.
+///
+/// @param _N order of the spline
+/// @param _Scalar scalar type to use
+template <int _N, typename _Scalar = double>
+Eigen::Matrix<_Scalar, _N, _N> computeBlendingMatrixBezier() {
+  Eigen::Matrix<double, _N, _N> m;
+  m.setZero();
+
+  for (int i = 0; i < _N; ++i) {
+    for (int j = 0; j < _N; ++j) {
+      if (i >= j) {
+        m(j, i) = std::pow(-1.0, i - j) * binomialCoefficient(_N - 1, j) * binomialCoefficient(_N - 1 - j, i - j);
+      }
+    }
+  }
+
+  return (m).template cast<_Scalar>();
+}
+
 /// @brief Compute base coefficient matrix for polynomials of size N.
 ///
 /// In each row starting from 0 contains the derivative coefficients of the

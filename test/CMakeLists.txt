@@ -26,6 +26,9 @@ target_link_libraries(test_image gtest_main basalt::basalt-headers-test-utils ba
 add_executable(test_spline src/test_spline.cpp)
 target_link_libraries(test_spline gtest_main basalt::basalt-headers-test-utils basalt::basalt-headers)
 
+add_executable(test_bezier src/test_bezier.cpp)
+target_link_libraries(test_bezier gtest_main basalt::basalt-headers-test-utils basalt::basalt-headers)
+
 add_executable(test_spline_se3 src/test_spline_se3.cpp)
 target_link_libraries(test_spline_se3 gtest_main basalt::basalt-headers-test-utils basalt::basalt-headers)
 
@@ -59,6 +62,7 @@ enable_testing()
 
 gtest_discover_tests(test_image)
 gtest_discover_tests(test_spline)
+gtest_discover_tests(test_bezier)
 gtest_discover_tests(test_spline_se3)
 gtest_discover_tests(test_camera)
 gtest_discover_tests(test_sophus)

@@ -40,7 +40,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <Eigen/Dense>
 #include <cstdint>
-#include <iostream>
 
 namespace basalt {
 

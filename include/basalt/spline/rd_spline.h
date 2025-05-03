@@ -122,6 +122,12 @@ class RdSpline {
     std::array<_Scalar, N> d_val_d_knot;  ///< Value of nonzero Jacobians.
   };
 
+  /// @brief Struct to store the Jacobian of the squared integral of spline
+  ///
+  struct IntegralJacobianStruct {
+    Eigen::aligned_deque<VecD> d_int_d_knot;
+  };
+
   /// @brief Default constructor
   RdSpline() = default;
 
@@ -312,21 +318,29 @@ class RdSpline {
   /// @brief Evaluate integral of the squared value or squared time derivative
   /// of the spline
   template <int Derivative>
-  inline _Scalar evaluateIntegralSquared() const {
-    _Scalar res = 0;
+  inline _Scalar evaluateIntegralSquared(
+      IntegralJacobianStruct* J = nullptr) const {
+    _Scalar res = _Scalar(0);
+
+    if (J) {
+      J->d_int_d_knot.resize(knots_.size());
+      for (auto& k : J->d_int_d_knot) {
+        k.setZero();
+      }
+    }
 
     if (Derivative >= 0 && Derivative < N) {
       Eigen::Matrix<double, DIM, N> knots_matrix;
+      Eigen::Matrix<double, DIM, N> tmp;
       MatN integral_quad_coeff = BLENDING_MATRIX *
                                  QUADRATIC_COEFFICIENTS[Derivative] *
                                  BLENDING_MATRIX.transpose();
 
       _Scalar scaling;
       if (Derivative == 0) {
-        scaling = _Scalar(0.5) / pow_inv_dt_[1];
+        scaling = _Scalar(1) / pow_inv_dt_[1];
       } else {
-        scaling = _Scalar(0.5) * pow_inv_dt_[Derivative] *
-                  pow_inv_dt_[Derivative - 1];
+        scaling = pow_inv_dt_[Derivative] * pow_inv_dt_[Derivative - 1];
       }
 
       for (int start_knot_idx = 0; start_knot_idx <= int(knots_.size()) - N;
@@ -335,9 +349,16 @@ class RdSpline {
           knots_matrix.col(i) = getKnot(start_knot_idx + i);
         }
 
-        res += scaling * ((knots_matrix * integral_quad_coeff).array() *
-                          knots_matrix.array())
-                             .sum();
+        tmp = knots_matrix * integral_quad_coeff;
+
+        if (J) {
+          for (int i = 0; i < N; i++) {
+            J->d_int_d_knot[start_knot_idx + i] += scaling * tmp.col(i);
+          }
+        }
+
+        res +=
+            _Scalar(0.5) * scaling * (tmp.array() * knots_matrix.array()).sum();
       }
     }
 

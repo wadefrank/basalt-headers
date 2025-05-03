@@ -76,6 +76,10 @@ class RdBezier {
     std::array<_Scalar, N> d_val_d_knot;  ///< Value of nonzero Jacobians.
   };
 
+  struct IntegralJacobianStruct {
+    std::array<VecD, _N> d_int_d_knot;
+  };
+
   /// @brief Default constructor
   RdBezier() = default;
 
@@ -233,11 +237,13 @@ class RdBezier {
   /// @brief Evaluate integral of the squared value or squared time derivative
   /// of the spline
   template <int Derivative>
-  inline _Scalar evaluateIntegralSquared() const {
-    _Scalar res = 0;
+  inline _Scalar evaluateIntegralSquared(
+      IntegralJacobianStruct* J = nullptr) const {
+    _Scalar res = _Scalar(0);
 
     if (Derivative >= 0 && Derivative < N) {
       Eigen::Matrix<double, DIM, N> knots_matrix;
+      Eigen::Matrix<double, DIM, N> tmp;
 
       for (int i = 0; i < N; i++) {
         knots_matrix.col(i) = getKnot(i);
@@ -245,18 +251,21 @@ class RdBezier {
 
       _Scalar scaling;
       if (Derivative == 0) {
-        scaling = _Scalar(0.5) / pow_inv_dt_[1];
+        scaling = _Scalar(1.0) / pow_inv_dt_[1];
       } else {
-        scaling = _Scalar(0.5) * pow_inv_dt_[Derivative] *
-                  pow_inv_dt_[Derivative - 1];
+        scaling = pow_inv_dt_[Derivative] * pow_inv_dt_[Derivative - 1];
       }
 
-      res = scaling *
-            ((knots_matrix * BLENDING_MATRIX *
-              QUADRATIC_COEFFICIENTS[Derivative] * BLENDING_MATRIX.transpose())
-                 .array() *
-             knots_matrix.array())
-                .sum();
+      tmp = knots_matrix * BLENDING_MATRIX *
+            QUADRATIC_COEFFICIENTS[Derivative] * BLENDING_MATRIX.transpose();
+
+      if (J) {
+        for (int i = 0; i < N; i++) {
+          J->d_int_d_knot[i] = scaling * tmp.col(i);
+        }
+      }
+
+      res = _Scalar(0.5) * scaling * (tmp.array() * knots_matrix.array()).sum();
     }
 
     return res;

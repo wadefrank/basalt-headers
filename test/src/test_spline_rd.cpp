@@ -34,6 +34,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <iostream>
 
+#include "basalt/utils/assert.h"
 #include "gtest/gtest.h"
 #include "test_utils.h"
 
@@ -93,8 +94,12 @@ void testTimeDeriv(const basalt::RdSpline<DIM, N> &spline, int64_t t_ns) {
 
 template <int DIM, int N, int DERIV>
 void testEvaluateIntegral(const basalt::RdSpline<DIM, N> &spline) {
+  using VectorD = typename basalt::RdSpline<DIM, N>::VecD;
+
+  typename basalt::RdSpline<DIM, N>::IntegralJacobianStruct J_spline;
+
   double analytic_integral_squared =
-      spline.template evaluateIntegralSquared<DERIV>();
+      spline.template evaluateIntegralSquared<DERIV>(&J_spline);
 
   double numeric_integral_squared = 0;
   int64_t dt_ns = 1e6;
@@ -108,6 +113,29 @@ void testEvaluateIntegral(const basalt::RdSpline<DIM, N> &spline) {
   EXPECT_NEAR(analytic_integral_squared, numeric_integral_squared, 1e-4)
       << "analytic_integral_squared " << analytic_integral_squared
       << " numeric_integral_squared " << numeric_integral_squared << std::endl;
+
+  for (size_t i = 0; i < spline.numKnots(); i++) {
+    std::stringstream ss;
+
+    ss << "d_int_d_knot" << i;
+
+    VectorD x0;
+    x0.setZero();
+
+    test_jacobian(
+        ss.str(), J_spline.d_int_d_knot[i].transpose(),
+        [&](const VectorD &x) {
+          UNUSED(x);
+          basalt::RdSpline<DIM, N> spline1 = spline;
+          spline1.getKnot(i) += x;
+
+          Eigen::Matrix<double, 1, 1> res;
+          res[0] = spline1.template evaluateIntegralSquared<DERIV>();
+
+          return res;
+        },
+        x0);
+  }
 }
 
 TEST(SplineTest, UBSplineEvaluateKnots4) {

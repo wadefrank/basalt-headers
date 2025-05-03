@@ -108,33 +108,14 @@ void testEquality(const basalt::RdBezier<DIM, N> &bezier,
 template <int DIM, int N, int DERIV>
 void testEvaluateSplineTransform() {
   basalt::RdSpline<DIM, N> spline(int64_t(2e9));
-  spline.genRandomTrajectory(N, false);
+  spline.genRandomTrajectory(3*N, false);
 
-  typename basalt::RdSpline<DIM, N>::MatN transform =
-      basalt::RdSpline<DIM, N>::BLENDING_MATRIX *
-      basalt::RdBezier<DIM, N>::INV_BLENDING_MATRIX;
+  for (int i = 0; i < 2 * N; i++) {
+    basalt::RdBezier<DIM, N> bezier = spline.getSegmentBezierCurve(i);
 
-  Eigen::Matrix<double, DIM, N> tmp;
-
-  for (int i = 0; i < N; i++) {
-    typename basalt::RdSpline<DIM, N>::VecD knot = spline.getKnot(i);
-    for (int j = 0; j < DIM; j++) {
-      tmp(j, i) = knot[j];
+    for (int64_t t_ns = bezier.minTimeNs(); t_ns < bezier.maxTimeNs(); t_ns += 1e8) {
+      testEquality<DIM, N, DERIV>(bezier, spline, t_ns);
     }
-  }
-  tmp *= transform;
-
-  basalt::RdBezier<DIM, N> bezier(spline.getTimeIntervalNs());
-  for (int i = 0; i < N; i++) {
-    typename basalt::RdSpline<DIM, N>::VecD knot;
-    for (int j = 0; j < DIM; j++) {
-      knot[j] = tmp(j, i);
-    }
-    bezier.getKnot(i) = knot;
-  }
-
-  for (int64_t t_ns = 0; t_ns < spline.maxTimeNs(); t_ns += 1e8) {
-    testEquality<DIM, N, DERIV>(bezier, spline, t_ns);
   }
 }
 

@@ -232,7 +232,7 @@ class RdBezier {
 
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-  // protected:
+  protected:
   /// @brief Vector of derivatives of time polynomial.
   ///
   /// Computes a derivative of \f$ \begin{bmatrix}1 & t & t^2 & \dots &
@@ -263,7 +263,7 @@ class RdBezier {
   }
 
   template <int, int, typename>
-  friend class RdBezier;
+  friend class RdSpline;
 
   static const MatN
       BLENDING_MATRIX;  ///< Blending matrix. See \ref computeBlendingMatrix.

@@ -309,6 +309,41 @@ class RdSpline {
     return evaluate<2>(time_ns, J);
   }
 
+  /// @brief Evaluate integral of the squared value or squared time derivative
+  /// of the spline
+  template <int Derivative>
+  inline _Scalar evaluateIntegralSquared() const {
+    _Scalar res = 0;
+
+    if (Derivative >= 0 && Derivative < N) {
+      Eigen::Matrix<double, DIM, N> knots_matrix;
+      MatN integral_quad_coeff = BLENDING_MATRIX *
+                                 QUADRATIC_COEFFICIENTS[Derivative] *
+                                 BLENDING_MATRIX.transpose();
+
+      _Scalar scaling;
+      if (Derivative == 0) {
+        scaling = _Scalar(0.5) / pow_inv_dt_[1];
+      } else {
+        scaling = _Scalar(0.5) * pow_inv_dt_[Derivative] *
+                  pow_inv_dt_[Derivative - 1];
+      }
+
+      for (int start_knot_idx = 0; start_knot_idx <= int(knots_.size()) - N;
+           start_knot_idx++) {
+        for (int i = 0; i < N; i++) {
+          knots_matrix.col(i) = getKnot(start_knot_idx + i);
+        }
+
+        res += scaling * ((knots_matrix * integral_quad_coeff).array() *
+                          knots_matrix.array())
+                             .sum();
+      }
+    }
+
+    return res;
+  }
+
   RdBezier<_DIM, _N, _Scalar> getSegmentBezierCurve(int start_knot) const {
     BASALT_ASSERT_STREAM(start_knot >= 0, "start_knot " << start_knot);
     BASALT_ASSERT_STREAM(
@@ -374,6 +409,10 @@ class RdSpline {
   static const MatN BASE_COEFFICIENTS;  ///< Base coefficients matrix.
                                         ///< See \ref computeBaseCoefficients.
 
+  static const std::array<MatN, _N>
+      QUADRATIC_COEFFICIENTS;  ///< Matrices used to compute integral of the
+                               ///< squared time derivatives
+
   Eigen::aligned_deque<VecD> knots_;    ///< Knots
   int64_t dt_ns_{0};                    ///< Knot interval in nanoseconds
   int64_t start_t_ns_{0};               ///< Start time in nanoseconds
@@ -384,6 +423,11 @@ template <int _DIM, int _N, typename _Scalar>
 const typename RdSpline<_DIM, _N, _Scalar>::MatN
     RdSpline<_DIM, _N, _Scalar>::BASE_COEFFICIENTS =
         computeBaseCoefficients<_N, _Scalar>();
+
+template <int _DIM, int _N, typename _Scalar>
+const std::array<typename RdSpline<_DIM, _N, _Scalar>::MatN, _N>
+    RdSpline<_DIM, _N, _Scalar>::QUADRATIC_COEFFICIENTS =
+        computeQuadraticCoefficients<_N, _Scalar>();
 
 template <int _DIM, int _N, typename _Scalar>
 const typename RdSpline<_DIM, _N, _Scalar>::MatN

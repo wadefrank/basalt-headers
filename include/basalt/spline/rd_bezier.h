@@ -230,7 +230,8 @@ class RdBezier {
     return evaluate<2>(time_ns, J);
   }
 
-  /// @brief Evaluate integral of the value or time derivative of the spline
+  /// @brief Evaluate integral of the squared value or squared time derivative
+  /// of the spline
   template <int Derivative>
   inline _Scalar evaluateIntegralSquared() const {
     _Scalar res = 0;
@@ -244,9 +245,10 @@ class RdBezier {
 
       _Scalar scaling;
       if (Derivative == 0) {
-        scaling = 0.5 / pow_inv_dt_[1];
+        scaling = _Scalar(0.5) / pow_inv_dt_[1];
       } else {
-        scaling = 0.5 * pow_inv_dt_[Derivative] * pow_inv_dt_[Derivative - 1];
+        scaling = _Scalar(0.5) * pow_inv_dt_[Derivative] *
+                  pow_inv_dt_[Derivative - 1];
       }
 
       res = scaling *

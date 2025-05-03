@@ -92,6 +92,25 @@ void testTimeDeriv(const basalt::RdSpline<DIM, N> &spline, int64_t t_ns) {
       x0);
 }
 
+template <int DIM, int N, int DERIV>
+void testEvaluateIntegral(const basalt::RdSpline<DIM, N> &spline) {
+  double analytic_integral_squared =
+      spline.template evaluateIntegralSquared<DERIV>();
+
+  double numeric_integral_squared = 0;
+  int64_t dt_ns = 1e6;
+  for (int64_t t_ns = spline.minTimeNs() + dt_ns / 2; t_ns < spline.maxTimeNs();
+       t_ns += dt_ns) {
+    typename basalt::RdBezier<DIM, N>::VecD x =
+        spline.template evaluate<DERIV>(t_ns);
+    numeric_integral_squared += x.squaredNorm() * dt_ns * 1e-9;
+  }
+
+  EXPECT_NEAR(analytic_integral_squared, numeric_integral_squared, 1e-4)
+      << "analytic_integral_squared " << analytic_integral_squared
+      << " numeric_integral_squared " << numeric_integral_squared << std::endl;
+}
+
 template <int N>
 void testEvaluateSo3(const basalt::So3Spline<N> &spline, int64_t t_ns) {
   using VectorD = typename basalt::So3Spline<N>::Vec3;
@@ -488,6 +507,126 @@ TEST(SplineTest, UBSplineVelocityTimeDeriv6) {
   for (int64_t t_ns = 1e8; t_ns < spline.maxTimeNs() - 1e8; t_ns += 1e8) {
     testTimeDeriv<DIM, N, 1>(spline, t_ns);
   }
+}
+
+TEST(SplineTest, UBSplineEvaluateSquaredIntegralPos4) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 4;
+
+  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
+  spline.genRandomTrajectory(3 * N);
+
+  testEvaluateIntegral<DIM, N, 0>(spline);
+}
+
+TEST(SplineTest, UBSplineEvaluateSquaredIntegralVell4) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 4;
+
+  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
+  spline.genRandomTrajectory(3 * N);
+
+  testEvaluateIntegral<DIM, N, 1>(spline);
+}
+
+TEST(SplineTest, UBSplineEvaluateSquaredIntegralAcc4) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 4;
+
+  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
+  spline.genRandomTrajectory(3 * N);
+
+  testEvaluateIntegral<DIM, N, 2>(spline);
+}
+
+TEST(SplineTest, UBSplineEvaluateSquaredIntegralJerk4) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 4;
+
+  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
+  spline.genRandomTrajectory(3 * N);
+
+  testEvaluateIntegral<DIM, N, 3>(spline);
+}
+
+TEST(SplineTest, UBSplineEvaluateSquaredIntegralPos5) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 5;
+
+  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
+  spline.genRandomTrajectory(3 * N);
+
+  testEvaluateIntegral<DIM, N, 0>(spline);
+}
+
+TEST(SplineTest, UBSplineEvaluateSquaredIntegralVell5) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 5;
+
+  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
+  spline.genRandomTrajectory(3 * N);
+
+  testEvaluateIntegral<DIM, N, 1>(spline);
+}
+
+TEST(SplineTest, UBSplineEvaluateSquaredIntegralAcc5) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 5;
+
+  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
+  spline.genRandomTrajectory(3 * N);
+
+  testEvaluateIntegral<DIM, N, 2>(spline);
+}
+
+TEST(SplineTest, UBSplineEvaluateSquaredIntegralJerk5) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 5;
+
+  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
+  spline.genRandomTrajectory(3 * N);
+
+  testEvaluateIntegral<DIM, N, 3>(spline);
+}
+
+TEST(SplineTest, UBSplineEvaluateSquaredIntegralPos6) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 6;
+
+  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
+  spline.genRandomTrajectory(3 * N);
+
+  testEvaluateIntegral<DIM, N, 0>(spline);
+}
+
+TEST(SplineTest, UBSplineEvaluateSquaredIntegralVell6) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 6;
+
+  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
+  spline.genRandomTrajectory(3 * N);
+
+  testEvaluateIntegral<DIM, N, 1>(spline);
+}
+
+TEST(SplineTest, UBSplineEvaluateSquaredIntegralAcc6) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 6;
+
+  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
+  spline.genRandomTrajectory(3 * N);
+
+  testEvaluateIntegral<DIM, N, 2>(spline);
+}
+
+TEST(SplineTest, UBSplineEvaluateSquaredIntegralJerk6) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 6;
+
+  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
+  spline.genRandomTrajectory(3 * N);
+
+  testEvaluateIntegral<DIM, N, 3>(spline);
 }
 
 TEST(SplineTest, SO3CUBSplineEvaluateKnots4) {

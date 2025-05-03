@@ -108,15 +108,155 @@ void testEquality(const basalt::RdBezier<DIM, N> &bezier,
 template <int DIM, int N, int DERIV>
 void testEvaluateSplineTransform() {
   basalt::RdSpline<DIM, N> spline(int64_t(2e9));
-  spline.genRandomTrajectory(3*N, false);
+  spline.genRandomTrajectory(3 * N, false);
 
   for (int i = 0; i < 2 * N; i++) {
     basalt::RdBezier<DIM, N> bezier = spline.getSegmentBezierCurve(i);
 
-    for (int64_t t_ns = bezier.minTimeNs(); t_ns < bezier.maxTimeNs(); t_ns += 1e8) {
+    for (int64_t t_ns = bezier.minTimeNs(); t_ns < bezier.maxTimeNs();
+         t_ns += 1e8) {
       testEquality<DIM, N, DERIV>(bezier, spline, t_ns);
     }
   }
+}
+
+template <int DIM, int N, int DERIV>
+void testEvaluateIntegral(const basalt::RdBezier<DIM, N> &spline) {
+  double analytic_integral_squared =
+      spline.template evaluateIntegralSquared<DERIV>();
+
+  double numeric_integral_squared = 0;
+  int64_t dt_ns = 1e6;
+  for (int64_t t_ns = spline.minTimeNs() + dt_ns / 2; t_ns < spline.maxTimeNs();
+       t_ns += dt_ns) {
+    typename basalt::RdBezier<DIM, N>::VecD x =
+        spline.template evaluate<DERIV>(t_ns);
+    numeric_integral_squared += x.squaredNorm() * dt_ns * 1e-9;
+  }
+
+  EXPECT_NEAR(analytic_integral_squared, numeric_integral_squared, 1e-4)
+      << "analytic_integral_squared " << analytic_integral_squared
+      << " numeric_integral_squared " << numeric_integral_squared << std::endl;
+}
+
+TEST(BezierTest, UBBezierEvaluateIntegralSquaredPos4) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 4;
+
+  basalt::RdBezier<DIM, N> spline(int64_t(3e9));
+  spline.genRandomTrajectory();
+
+  testEvaluateIntegral<DIM, N, 0>(spline);
+}
+
+TEST(BezierTest, UBBezierEvaluateIntegralSquaredVel4) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 4;
+
+  basalt::RdBezier<DIM, N> spline(int64_t(3e9));
+  spline.genRandomTrajectory();
+
+  testEvaluateIntegral<DIM, N, 1>(spline);
+}
+
+TEST(BezierTest, UBBezierEvaluateIntegralSquaredAcc4) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 4;
+
+  basalt::RdBezier<DIM, N> spline(int64_t(3e9));
+  spline.genRandomTrajectory();
+
+  testEvaluateIntegral<DIM, N, 2>(spline);
+}
+
+TEST(BezierTest, UBBezierEvaluateIntegralSquaredJerk4) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 4;
+
+  basalt::RdBezier<DIM, N> spline(int64_t(3e9));
+  spline.genRandomTrajectory();
+
+  testEvaluateIntegral<DIM, N, 3>(spline);
+}
+
+TEST(BezierTest, UBBezierEvaluateIntegralSquaredPos5) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 5;
+
+  basalt::RdBezier<DIM, N> spline(int64_t(3e9));
+  spline.genRandomTrajectory();
+
+  testEvaluateIntegral<DIM, N, 0>(spline);
+}
+
+TEST(BezierTest, UBBezierEvaluateIntegralSquaredVel5) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 5;
+
+  basalt::RdBezier<DIM, N> spline(int64_t(3e9));
+  spline.genRandomTrajectory();
+
+  testEvaluateIntegral<DIM, N, 1>(spline);
+}
+
+TEST(BezierTest, UBBezierEvaluateIntegralSquaredAcc5) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 5;
+
+  basalt::RdBezier<DIM, N> spline(int64_t(3e9));
+  spline.genRandomTrajectory();
+
+  testEvaluateIntegral<DIM, N, 2>(spline);
+}
+
+TEST(BezierTest, UBBezierEvaluateIntegralSquaredJerk5) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 5;
+
+  basalt::RdBezier<DIM, N> spline(int64_t(3e9));
+  spline.genRandomTrajectory();
+
+  testEvaluateIntegral<DIM, N, 3>(spline);
+}
+
+TEST(BezierTest, UBBezierEvaluateIntegralSquaredPos6) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 6;
+
+  basalt::RdBezier<DIM, N> spline(int64_t(3e9));
+  spline.genRandomTrajectory();
+
+  testEvaluateIntegral<DIM, N, 0>(spline);
+}
+
+TEST(BezierTest, UBBezierEvaluateIntegralSquaredVel6) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 6;
+
+  basalt::RdBezier<DIM, N> spline(int64_t(3e9));
+  spline.genRandomTrajectory();
+
+  testEvaluateIntegral<DIM, N, 1>(spline);
+}
+
+TEST(BezierTest, UBBezierEvaluateIntegralSquaredAcc6) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 6;
+
+  basalt::RdBezier<DIM, N> spline(int64_t(3e9));
+  spline.genRandomTrajectory();
+
+  testEvaluateIntegral<DIM, N, 2>(spline);
+}
+
+TEST(BezierTest, UBBezierEvaluateIntegralSquaredJerk6) {
+  static constexpr int DIM = 3;
+  static constexpr int N = 6;
+
+  basalt::RdBezier<DIM, N> spline(int64_t(3e9));
+  spline.genRandomTrajectory();
+
+  testEvaluateIntegral<DIM, N, 3>(spline);
 }
 
 TEST(BezierTest, UBBezierBsplineKnotTransforme4) {

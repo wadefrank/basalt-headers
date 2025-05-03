@@ -230,9 +230,39 @@ class RdBezier {
     return evaluate<2>(time_ns, J);
   }
 
+  /// @brief Evaluate integral of the value or time derivative of the spline
+  template <int Derivative>
+  inline _Scalar evaluateIntegralSquared() const {
+    _Scalar res = 0;
+
+    if (Derivative >= 0 && Derivative < N) {
+      Eigen::Matrix<double, DIM, N> knots_matrix;
+
+      for (int i = 0; i < N; i++) {
+        knots_matrix.col(i) = getKnot(i);
+      }
+
+      _Scalar scaling;
+      if (Derivative == 0) {
+        scaling = 0.5 / pow_inv_dt_[1];
+      } else {
+        scaling = 0.5 * pow_inv_dt_[Derivative] * pow_inv_dt_[Derivative - 1];
+      }
+
+      res = scaling *
+            ((knots_matrix * BLENDING_MATRIX *
+              QUADRATIC_COEFFICIENTS[Derivative] * BLENDING_MATRIX.transpose())
+                 .array() *
+             knots_matrix.array())
+                .sum();
+    }
+
+    return res;
+  }
+
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-  protected:
+ protected:
   /// @brief Vector of derivatives of time polynomial.
   ///
   /// Computes a derivative of \f$ \begin{bmatrix}1 & t & t^2 & \dots &
@@ -268,8 +298,11 @@ class RdBezier {
   static const MatN
       BLENDING_MATRIX;  ///< Blending matrix. See \ref computeBlendingMatrix.
 
-  static const MatN INV_BLENDING_MATRIX;  ///< Inverse blending matrix. See \ref
-                                          ///< computeBlendingMatrix.
+  static const MatN INV_BLENDING_MATRIX;  ///< Inverse blending matrix.
+
+  static const std::array<MatN, _N>
+      QUADRATIC_COEFFICIENTS;  ///< Matrices used to compute integral of the
+                               ///< squared time derivatives
 
   static const MatN BASE_COEFFICIENTS;  ///< Base coefficients matrix.
                                         ///< See \ref computeBaseCoefficients.
@@ -289,6 +322,11 @@ template <int _DIM, int _N, typename _Scalar>
 const typename RdBezier<_DIM, _N, _Scalar>::MatN
     RdBezier<_DIM, _N, _Scalar>::BLENDING_MATRIX =
         computeBlendingMatrixBezier<_N, _Scalar>();
+
+template <int _DIM, int _N, typename _Scalar>
+const std::array<typename RdBezier<_DIM, _N, _Scalar>::MatN, _N>
+    RdBezier<_DIM, _N, _Scalar>::QUADRATIC_COEFFICIENTS =
+        computeQuadraticCoefficients<_N, _Scalar>();
 
 template <int _DIM, int _N, typename _Scalar>
 const typename RdBezier<_DIM, _N, _Scalar>::MatN

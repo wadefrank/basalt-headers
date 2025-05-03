@@ -40,6 +40,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <Eigen/Dense>
 #include <cstdint>
+#include <iostream>
 
 namespace basalt {
 
@@ -153,6 +154,32 @@ Eigen::Matrix<_Scalar, _N, _N> computeBaseCoefficients() {
     order--;
   }
   return base_coefficients.template cast<_Scalar>();
+}
+
+/// @brief Compute quadratic coefficient matrix for polynomials of size N.
+template <int _N, typename _Scalar = double>
+std::array<Eigen::Matrix<_Scalar, _N, _N>, _N> computeQuadraticCoefficients() {
+  std::array<Eigen::Matrix<_Scalar, _N, _N>, _N> res;
+  Eigen::Matrix<_Scalar, _N, _N> base_coefficients =
+      computeBaseCoefficients<_N, _Scalar>();
+
+  constexpr int DEG = _N - 1;
+
+  for (int derivative = 0; derivative < _N; derivative++) {
+    res[derivative].setZero();
+
+    for (int col = 0; col < _N - derivative; col++) {
+      for (int row = 0; row < _N - derivative; row++) {
+        _Scalar exp = (DEG - derivative) * 2 + 1 - row - col;
+
+        res[derivative](DEG - row, DEG - col) =
+            base_coefficients(derivative, _N - 1 - row) *
+            base_coefficients(derivative, _N - 1 - col) * 2 / exp;
+      }
+    }
+  }
+
+  return res;
 }
 
 }  // namespace basalt

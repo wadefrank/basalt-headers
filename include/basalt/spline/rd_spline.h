@@ -38,8 +38,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #pragma once
 
-#include <basalt/spline/spline_common.h>
 #include <basalt/spline/rd_bezier.h>
+#include <basalt/spline/spline_common.h>
 #include <basalt/utils/assert.h>
 #include <basalt/utils/sophus_utils.hpp>
 
@@ -311,11 +311,15 @@ class RdSpline {
 
   RdBezier<_DIM, _N, _Scalar> getSegmentBezierCurve(int start_knot) const {
     BASALT_ASSERT_STREAM(start_knot >= 0, "start_knot " << start_knot);
-    BASALT_ASSERT_STREAM(start_knot <= int(knots_.size() - N), "start_knot " << start_knot << " knots_.size() " << knots_.size());
+    BASALT_ASSERT_STREAM(
+        start_knot <= int(knots_.size() - N),
+        "start_knot " << start_knot << " knots_.size() " << knots_.size());
 
-    RdBezier<_DIM, _N, _Scalar> bezier(dt_ns_, start_t_ns_ + start_knot * dt_ns_);
+    RdBezier<_DIM, _N, _Scalar> bezier(dt_ns_,
+                                       start_t_ns_ + start_knot * dt_ns_);
 
-    MatN transform = BLENDING_MATRIX * basalt::RdBezier<_DIM, _N, _Scalar>::INV_BLENDING_MATRIX;
+    MatN transform = BLENDING_MATRIX *
+                     basalt::RdBezier<_DIM, _N, _Scalar>::INV_BLENDING_MATRIX;
     Eigen::Matrix<double, DIM, N> knots_matrix;
 
     for (int i = 0; i < N; i++) {
@@ -331,7 +335,7 @@ class RdSpline {
 
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-  protected:
+ protected:
   /// @brief Vector of derivatives of time polynomial.
   ///
   /// Computes a derivative of \f$ \begin{bmatrix}1 & t & t^2 & \dots &

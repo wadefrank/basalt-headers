@@ -51,7 +51,9 @@ template <class Scalar>
 struct Calibration {
   using Ptr = std::shared_ptr<Calibration>;
   using SE3 = Sophus::SE3<Scalar>;
+  using Vec2 = Eigen::Matrix<Scalar, 2, 1>;
   using Vec3 = Eigen::Matrix<Scalar, 3, 1>;
+  using Vec4 = Eigen::Matrix<Scalar, 4, 1>;
 
   /// @brief Default constructor.
   Calibration() {
@@ -64,6 +66,26 @@ struct Calibration {
     accel_noise_std.setConstant(0.016);
     accel_bias_std.setConstant(0.001);
     gyro_bias_std.setConstant(0.0001);
+  }
+
+  /// @brief Reprojection offset of a point with a given inverse depth from
+  /// source camera to the target camera
+  Vec2 reprojection_offset(const Vec2& cs_uv, Scalar inv_depth,
+                           int source_cam_idx = 0,
+                           int target_cam_idx = 1) const {
+    SE3 T_ct_cs = T_i_c[target_cam_idx].inverse() * T_i_c[source_cam_idx];
+
+    Vec4 cs_xyzw;
+    intrinsics[source_cam_idx].unproject(cs_uv, c0_xyzw);
+    cs_xyzw = cs_xyzw;
+    cs_xyzw.w() = inv_depth;
+
+    Vec4 ct_xyzw = T_ct_cs * cs_xyzw;
+    Vec2 ct_uv;
+    intrinsics[target_cam_idx].project(ct_xyzw, ct_uv);
+
+    Vec2 reprojection_offset = cs_uv - ct_uv;
+    return reprojection_offset;
   }
 
   /// @brief Cast to other scalar type

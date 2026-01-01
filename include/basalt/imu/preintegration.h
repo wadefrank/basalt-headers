@@ -73,6 +73,17 @@ class IntegratedImuMeasurement {
   /// accelerometer measurement
   /// @param[out] d_next_d_gyro Jacobian of the predicted state with respect
   /// gyroscope measurement
+
+  /**
+   * @brief IMU状态递推
+   * 
+   * @param curr_state      当前状态，s_t
+   * @param data            t+1时刻IMU观测：加速度 a_{t+1} 和 角速度 w_{t+1}
+   * @param next_state      预测的状态，s_{t+1}  
+   * @param d_next_d_curr   d(s_{t+1}) / d(s_t)     ，维度 9 x 9
+   * @param d_next_d_accel  d(s_{t+1}) / d(a_{t+1}) ，维度 9 x 3
+   * @param d_next_d_gyro   d(s_{t+1}) / d(w_{t+1}) ，维度 9 x 3
+   */
   inline static void propagateState(const PoseVelState<Scalar>& curr_state,
                                     const ImuData<Scalar>& data,
                                     PoseVelState<Scalar>& next_state,
@@ -86,34 +97,60 @@ class IntegratedImuMeasurement {
     int64_t dt_ns = data.t_ns - curr_state.t_ns;
     Scalar dt = dt_ns * Scalar(1e-9);
 
-    SO3 R_w_i_new_2 =
-        curr_state.T_w_i.so3() * SO3::exp(Scalar(0.5) * dt * data.gyro);
+    // R_{(2t+1)/2} = R_t * Exp(0.5 * dt * w_{t+1})
+    SO3 R_w_i_new_2 = curr_state.T_w_i.so3() * SO3::exp(Scalar(0.5) * dt * data.gyro);
+    
+    // R_{(2t+1)/2}的矩阵形式
     Mat3 RR_w_i_new_2 = R_w_i_new_2.matrix();
 
+    // R_{(2t+1)/2} * a_{t+1}
     Vec3 accel_world = RR_w_i_new_2 * data.accel;
 
+    /******* s_{t+1} ********/
+    
+    // dt
     next_state.t_ns = data.t_ns;
+    
+    // 旋转：使用的是后向积分法
+    // R_{t+1} = R_t * Exp(dt * w_{t+1})
     next_state.T_w_i.so3() = curr_state.T_w_i.so3() * SO3::exp(dt * data.gyro);
+
+    // 速度：使用的是中值积分法
+    // v_{t+1} = v_t + R_{(2t+1)/2} * a_{t+1} * dt
     next_state.vel_w_i = curr_state.vel_w_i + accel_world * dt;
+
+    // 平移：使用的是中值积分法
+    // p_{t+1} = p_t + v_t * dt + 0.5 * R_{(2t+1)/2} * a_{t+1} * dt^2
     next_state.T_w_i.translation() = curr_state.T_w_i.translation() +
                                      curr_state.vel_w_i * dt +
                                      0.5 * accel_world * dt * dt;
 
+    // d(s_{t+1}) / d(a_{t+1})
     if (d_next_d_curr) {
       d_next_d_curr->setIdentity();
-      d_next_d_curr->template block<3, 3>(0, 6).diagonal().setConstant(dt);
-      d_next_d_curr->template block<3, 3>(6, 3) = SO3::hat(-accel_world * dt);
-      d_next_d_curr->template block<3, 3>(0, 3) =
-          d_next_d_curr->template block<3, 3>(6, 3) * dt * Scalar(0.5);
-    }
 
+      // d(p_{t+1}) / d(v_t)
+      d_next_d_curr->template block<3, 3>(0, 6).diagonal().setConstant(dt);
+
+      // d(v_{t+1}) / d(R_t)
+      d_next_d_curr->template block<3, 3>(6, 3) = SO3::hat(-accel_world * dt);
+      
+      // d(p_{t+1}) / d(R_t)
+      d_next_d_curr->template block<3, 3>(0, 3) = d_next_d_curr->template block<3, 3>(6, 3) * dt * Scalar(0.5);
+    }
+    
+    // d(s_{t+1}) / d(a_{t+1})
     if (d_next_d_accel) {
       d_next_d_accel->setZero();
-      d_next_d_accel->template block<3, 3>(0, 0) =
-          Scalar(0.5) * RR_w_i_new_2 * dt * dt;
+
+      // d(p_{t+1}) / d(a_{t+1})
+      d_next_d_accel->template block<3, 3>(0, 0) = Scalar(0.5) * RR_w_i_new_2 * dt * dt;
+
+      // d(p_{v+1}) / d(a_{t+1})
       d_next_d_accel->template block<3, 3>(6, 0) = RR_w_i_new_2 * dt;
     }
 
+    // d(s_{t+1}) / d(w_{t+1})
     if (d_next_d_gyro) {
       d_next_d_gyro->setZero();
 

@@ -73,6 +73,17 @@ class IntegratedImuMeasurement {
   /// accelerometer measurement
   /// @param[out] d_next_d_gyro Jacobian of the predicted state with respect
   /// gyroscope measurement
+
+    /**
+   * @brief IMU状态递推
+   * 
+   * @param curr_state      当前状态，s_t
+   * @param data            t+1时刻IMU观测：加速度 a_{t+1} 和 角速度 w_{t+1}
+   * @param next_state      预测的状态，s_{t+1}  
+   * @param d_next_d_curr   d(s_{t+1}) / d(s_t)     ，维度 9 x 9
+   * @param d_next_d_accel  d(s_{t+1}) / d(a_{t+1}) ，维度 9 x 3
+   * @param d_next_d_gyro   d(s_{t+1}) / d(w_{t+1}) ，维度 9 x 3
+   */
   inline static void propagateState(const PoseVelState<Scalar>& curr_state,
                                     const ImuData<Scalar>& data,
                                     PoseVelState<Scalar>& next_state,
@@ -90,17 +101,30 @@ class IntegratedImuMeasurement {
 
     // -------------------------- 核心积分计算 --------------------------
     // 1. 中值法计算旋转增量：先用半时间步的角速度计算旋转（用于加速度计的坐标系转换）
-    SO3 R_w_i_new_2 =
-        curr_state.T_w_i.so3() * SO3::exp(Scalar(0.5) * dt * data.gyro);
+    // R_{(2t+1)/2} = R_t * Exp(0.5 * dt * w_{t+1})
+    SO3 R_w_i_new_2 = curr_state.T_w_i.so3() * SO3::exp(Scalar(0.5) * dt * data.gyro);
+
+    // R_{(2t+1)/2}的矩阵形式
     Mat3 RR_w_i_new_2 = R_w_i_new_2.matrix();
 
     // 2. 加速度计测量值转换到世界坐标系（中值旋转）
+     // R_{(2t+1)/2} * a_{t+1}
     Vec3 accel_world = RR_w_i_new_2 * data.accel;
 
     // 3. 预测下一时刻状态
+    // dt
     next_state.t_ns = data.t_ns;                                                  // 时间戳更新
+    
+    // 旋转：使用的是后向积分法
+    // R_{t+1} = R_t * Exp(dt * w_{t+1})
     next_state.T_w_i.so3() = curr_state.T_w_i.so3() * SO3::exp(dt * data.gyro);   // 旋转更新（李群指数映射）
+    
+    // 速度：使用的是中值积分法
+    // v_{t+1} = v_t + R_{(2t+1)/2} * a_{t+1} * dt
     next_state.vel_w_i = curr_state.vel_w_i + accel_world * dt;                   // 速度更新
+    
+    // 平移：使用的是中值积分法
+    // p_{t+1} = p_t + v_t * dt + 0.5 * R_{(2t+1)/2} * a_{t+1} * dt^2
     next_state.T_w_i.translation() = curr_state.T_w_i.translation() +             // 位置更新
                                      curr_state.vel_w_i * dt +
                                      0.5 * accel_world * dt * dt;
@@ -108,39 +132,44 @@ class IntegratedImuMeasurement {
     // -------------------------- 雅可比矩阵计算 --------------------------
     // 雅可比矩阵用于优化过程中的残差求导
     
-    // 计算下一状态对当前状态的雅可比
+    // 计算下一状态对当前状态的雅可比：d(s_{t+1}) / d(s_t)
     if (d_next_d_curr) {
 
       // 初始化为单位矩阵（大部分元素不变）
       d_next_d_curr->setIdentity();
       
       // 位置对速度的偏导：dx/dv = dt（位置由速度积分而来）
+      // d(p_{t+1}) / d(v_t)
       d_next_d_curr->template block<3, 3>(0, 6).diagonal().setConstant(dt);
 
       // 速度对旋转的偏导：dv/dR = -[a_w ×] * dt（旋转变化影响加速度在世界系的表示）
       // [a_w ×] 是加速度的反对称矩阵（叉乘等价）
+      // d(v_{t+1}) / d(R_t)
       d_next_d_curr->template block<3, 3>(6, 3) = SO3::hat(-accel_world * dt);
 
       // 位置对旋转的偏导：dx/dR = 0.5 * dt * dv/dR（位置由速度积分，速度对旋转偏导的积分）
+      // d(p_{t+1}) / d(R_t)
       d_next_d_curr->template block<3, 3>(0, 3) =
           d_next_d_curr->template block<3, 3>(6, 3) * dt * Scalar(0.5);
     }
 
-    // 计算下一状态对当前状态的雅可比
+    // 计算下一状态对加速度计测量值的雅可比：d(s_{t+1}) / d(a_{t+1})
     if (d_next_d_accel) {
 
       // 初始化为零矩阵
       d_next_d_accel->setZero();
 
       // 位置对加速度的偏导：dx/da = 0.5 * R_mid * dt²（中值旋转矩阵）
+      // d(p_{t+1}) / d(a_{t+1})
       d_next_d_accel->template block<3, 3>(0, 0) =
           Scalar(0.5) * RR_w_i_new_2 * dt * dt;
       
       // 速度对加速度的偏导：dv/da = R_mid * dt
+      // d(p_{v+1}) / d(a_{t+1})
       d_next_d_accel->template block<3, 3>(6, 0) = RR_w_i_new_2 * dt;
     }
 
-    // 计算下一状态对陀螺仪测量值的雅可比
+    // 计算下一状态对陀螺仪测量值的雅可比：d(s_{t+1}) / d(w_{t+1})
     if (d_next_d_gyro) {
       d_next_d_gyro->setZero(); // 初始化为零矩阵
 

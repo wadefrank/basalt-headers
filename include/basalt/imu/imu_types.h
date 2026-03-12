@@ -43,13 +43,19 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 namespace basalt {
 
-constexpr size_t POSE_SIZE = 6;  ///< Dimentionality of the pose state
-constexpr size_t POSE_VEL_SIZE =
-    9;  ///< Dimentionality of the pose-velocity state
-constexpr size_t POSE_VEL_BIAS_SIZE =
-    15;  ///< Dimentionality of the pose-velocity-bias state
+// ===================== 状态维度常量定义 =====================
+
+constexpr size_t POSE_SIZE = 6;  ///< Dimentionality of the pose state，位姿状态的维度：SE(3) = 平移(3) + 旋转(3) = 6维
+constexpr size_t POSE_VEL_SIZE = 9;  ///< Dimentionality of the pose-velocity state，位姿+速度状态的维度：位姿(6) + 线速度(3) = 9维
+constexpr size_t POSE_VEL_BIAS_SIZE = 15;  ///< Dimentionality of the pose-velocity-bias state，位姿+速度+IMU偏置状态的维度：位姿(6) + 速度(3) + 陀螺仪偏置(3) + 加速度计偏置(3) = 15维
+
+
+// ===================== 基础位姿状态结构体 =====================
 
 /// @brief State that consists of SE(3) pose at a certain time.
+///        表示某一时刻的SE(3)位姿状态
+///
+/// @tparam Scalar_ 数值类型（如float/double），模板化支持不同精度
 template <class Scalar_>
 struct PoseState {
   using Scalar = Scalar_;
@@ -59,12 +65,14 @@ struct PoseState {
   using SE3 = Sophus::SE3<Scalar>;
 
   /// @brief Default constructor with Identity pose and zero timestamp.
+  ///        默认构造函数：时间戳为0，位姿为单位矩阵（无旋转、无平移）
   PoseState() { t_ns = 0; }
 
   /// @brief Constructor with timestamp and pose.
-  ///
-  /// @param t_ns timestamp of the state in nanoseconds
-  /// @param T_w_i transformation from the body frame to the world frame
+  ///        带参数的构造函数
+  /// 
+  /// @param t_ns timestamp of the state in nanoseconds，状态对应的时间戳（单位：纳秒）
+  /// @param T_w_i transformation from the body frame to the world frame，从机体坐标系(i)到世界坐标系(w)的变换矩阵（SE(3)）
   PoseState(int64_t t_ns, const SE3& T_w_i) : t_ns(t_ns), T_w_i(T_w_i) {}
 
   /// @brief Create copy with different Scalar type.

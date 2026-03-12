@@ -64,19 +64,40 @@ class ManagedImagePyr {
     setFromImage(other, num_levels);
   }
 
-  /// @brief Set image pyramid from other image.
+  /// @brief Set image pyramid from other image.  从外部图像构建图像金字塔（核心内联函数）
   ///
-  /// @param other image to use for the pyramid level 0
-  /// @param num_level number of levels for the pyramid
+  /// @param other image to use for the pyramid level 0     输入图像：作为金字塔第0层（最高分辨率层）的原始图像
+  /// @param num_level number of levels for the pyramid     金字塔的总层数（默认为3层）
   inline void setFromImage(const ManagedImage<T>& other, size_t num_levels) {
+
+    // 1. 保存原始图像宽度：用于后续金字塔层级的尺寸计算或回溯
     orig_w = other.w;
+
+    // 2. 重新初始化金字塔的底层存储缓冲区
+    // - other.w + other.w / 2：预分配足够大的内存（原始宽度+1/2原始宽度），避免多次内存分配
+    // - other.h：高度与原始图像一致
+    // - 目的：为所有金字塔层级的图像数据预留连续内存，提升缓存命中率和访问效率
     image.Reinitialise(other.w + other.w / 2, other.h);
+
+    // 3. 将预分配的缓冲区全部填充为0：初始化内存，避免脏数据影响
     image.Fill(0);
+
+    // 4. 将输入图像拷贝到金字塔第0层（最高分辨率层）
+    // - lvl_internal(0)：内部存储的第0层图像（非const，可写）
+    // - CopyFrom(other)：深拷贝原始图像数据到金字塔0层，保证原始图像不受后续下采样影响
     lvl_internal(0).CopyFrom(other);
 
+    // 5. 循环构建金字塔的第1~num_level层（下采样过程）
+    //    每一层都是上一层的1/2分辨率（宽高各缩小一倍）
     for (size_t i = 0; i < num_levels; i++) {
+      // 5.1 获取当前第i层的图像（const，只读）：作为下采样的输入
       const Image<const T> l = lvl(i);
+
+      // 5.2 获取第i+1层的图像（可写）：作为下采样的输出
       Image<T> lp1 = lvl_internal(i + 1);
+
+     // 5.3 核心操作：对第i层图像下采样，生成第i+1层图像
+      //     subsample函数通常实现高斯模糊+隔行隔列采样（避免混叠），是图像金字塔的标准构建方式
       subsample(l, lp1);
     }
   }
